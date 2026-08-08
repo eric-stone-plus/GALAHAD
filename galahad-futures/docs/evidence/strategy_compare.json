@@ -1,0 +1,73 @@
+{
+  "ts": "2026-08-04T22:02:08Z",
+  "status": "ok",
+  "symbol": "BTCUSDT",
+  "source_used": "cache",
+  "sample_kind": "venue",
+  "data_note": null,
+  "bars": 500,
+  "strategies": [
+    {
+      "id": "tsmom_48",
+      "strategy": "tsmom",
+      "kwargs": {
+        "lookback": 48,
+        "max_target_leverage": 1.5
+      },
+      "full_final_equity": 9544.598825279418,
+      "full_n_fills": 443,
+      "full_total_funding": -43.798338987626664,
+      "full_invalidated": false,
+      "full_max_drawdown": 0.09275877281621737,
+      "oos_final_equity": 9559.69127889891,
+      "oos_n_fills": 121,
+      "oos_sharpe": -0.0887058766862092,
+      "oos_returns_len": 124,
+      "deflated_sharpe_ratio": 0.1650794039170237
+    },
+    {
+      "id": "tsmom_168",
+      "strategy": "tsmom_long",
+      "kwargs": {
+        "lookback": 168,
+        "max_target_leverage": 1.0
+      },
+      "full_final_equity": 9767.286747731805,
+      "full_n_fills": 332,
+      "full_total_funding": -61.029388494832844,
+      "full_invalidated": false,
+      "full_max_drawdown": 0.05297817544552073,
+      "oos_final_equity": 10180.936105169321,
+      "oos_n_fills": 125,
+      "oos_sharpe": 0.05372040033950497,
+      "oos_returns_len": 124,
+      "deflated_sharpe_ratio": 0.721337751519286
+    },
+    {
+      "id": "dual_ma_8_21",
+      "strategy": "dual_ma",
+      "kwargs": {
+        "fast": 8,
+        "slow": 21,
+        "max_target_leverage": 2.0
+      },
+      "full_final_equity": 9507.503446967914,
+      "full_n_fills": 449,
+      "full_total_funding": 53.888078949121265,
+      "full_invalidated": false,
+      "full_max_drawdown": 0.09987547082015556,
+      "oos_final_equity": 9238.309719228846,
+      "oos_n_fills": 95,
+      "oos_sharpe": -0.15347130474092627,
+      "oos_returns_len": 124,
+      "deflated_sharpe_ratio": 0.038624346519761224
+    }
+  ],
+  "pbo_across_presets": 0.3333333333333333,
+  "pbo_error": null,
+  "policy_flags": [
+    "VENUE_OR_CACHE_SAMPLE",
+    "COMPARISON_ONLY_NO_EDGE_CLAIM"
+  ],
+  "doctrine": "Pre-specified short TSMOM / long TSMOM / dual_ma comparison on one sample. Does not promote any row when PBO/DSR fail."
+}

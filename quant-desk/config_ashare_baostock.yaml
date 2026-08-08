@@ -1,0 +1,38 @@
+# quant_desk — A-share lifecycle (baostock data)
+name: ashare_composite
+currency: CNY
+initial_cash: 1000000
+cost_tier: mid
+
+universe:
+  - "600519"  # 贵州茅台
+  - "000858"  # 五粮液
+  - "601318"  # 中国平安
+  - "600036"  # 招商银行
+  - "000333"  # 美的集团
+  - "600900"  # 长江电力
+  - "002415"  # 海康威视
+  - "600276"  # 恒瑞医药
+  - "000001"  # 平安银行
+  - "601888"  # 中国中免
+  - "300750"  # 宁德时代
+  - "002594"  # 比亚迪
+
+selection:
+  mode: composite
+  top_n: 5
+  weight_scheme: equal
+  max_weight: 0.30
+  min_price: 5.0
+  max_vol_ann: 1.0
+  require_uptrend: false
+  history_start: "2020-01-01"
+
+trading:
+  rebalance_band: 0.02
+  market: cn
+  provider: baostock
+
+backfill:
+  start: "2023-01-01"
+  rebalance: M

@@ -1,0 +1,55 @@
+# quant_desk — 完整投研/交易/管理配置
+
+name: quant_desk_paper
+currency: USD
+initial_cash: 1000000
+# 成本纪律（quiz2 r3）：全口径双边摩擦走 COST_TIERS（low 0.2% / mid 0.4% / high 0.5%），
+# 禁止「万五」默认；纸面账本单边费 = tier/2（scripts/_common.resolve_fee_bps）。
+cost_tier: mid
+
+# 选股
+universe:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMZN
+  - GOOGL
+  - META
+  - TSLA
+  - AMD
+  - AVGO
+  - TSM
+  - SMCI
+  - ASML
+  - MU
+  - JPM
+  - XOM
+  - UNH
+  - JNJ
+  - V
+  - MA
+  - COST
+
+selection:
+  mode: momentum         # momentum | quality_trend | mean_reversion | composite
+  top_n: 15
+  weight_scheme: equal     # equal | score
+  max_weight: 0.30
+  min_price: 10.0
+  max_vol_ann: 1.0
+  require_uptrend: false
+  history_start: "2020-01-01"
+
+# 交易（纸面）
+trading:
+  rebalance_band: 0.02     # 权重偏离超过 2% 才调仓
+  market: us
+  provider: yahoo
+
+# 回测模拟（历史生命周期）
+backfill:
+  start: "2023-01-01"
+  rebalance: Q             # D | W | M | Q
+
+# 基准
+benchmark: "^GSPC"

@@ -1,0 +1,93 @@
+[
+  {
+    "tag": "bailey_dsr",
+    "entries": []
+  },
+  {
+    "tag": "lopez_afml",
+    "entries": [
+      {
+        "title": "Determining Optimal Trading Rules without Backtesting",
+        "id": "http://arxiv.org/abs/1408.1159v2",
+        "published": "2014-08-06",
+        "summary": "Calibrating a trading rule using a historical simulation (also called backtest) contributes to backtest overfitting, which in turn leads to underperformance. In this paper we propose a procedure for determining the optimal trading rule (OTR) without running alternative model configurations through a backtest engine. We present empirical evidence of the existence of such optimal solutions for the c"
+      }
+    ]
+  },
+  {
+    "tag": "funding_perp_fund",
+    "entries": [
+      {
+        "title": "Designing funding rates for perpetual futures in cryptocurrency markets",
+        "id": "http://arxiv.org/abs/2506.08573v1",
+        "published": "2025-06-10",
+        "summary": "In cryptocurrency markets, a key challenge for perpetual future issuers is maintaining alignment between the perpetual future price and target value. This study addresses this challenge by exploring the relationship between funding rates and perpetual future prices. Our results demonstrate that by appropriately designing funding rates, the perpetual future price can remain aligned with the target "
+      },
+      {
+        "title": "Resolution-Aware Perpetual Futures on Binary Prediction Markets: Failure Modes and Mechanical Stress Tests Using Polymarket Data",
+        "id": "http://arxiv.org/abs/2605.10400v2",
+        "published": "2026-05-11",
+        "summary": "We study whether crypto-style perpetual-futures mechanics can be applied to a binary event claim that ultimately pays 0 or 1. A synthetic long entered at price p0 with collateral xp0/L has terminal equity -xp0(1-1/L) when the claim pays 0, if the position survives to resolution without a top-up, close, or conversion. Thus any L > 1 creates an adverse-outcome account shortfall under these condition"
+      },
+      {
+        "title": "Perpetual Futures Pricing",
+        "id": "http://arxiv.org/abs/2310.11771v2",
+        "published": "2023-10-18",
+        "summary": "Perpetual futures are contracts without expiration date in which the anchoring of the futures price to the spot price is ensured by periodic funding payments from long to short. We derive explicit expressions for the no-arbitrage price of various perpetual contracts, including linear, inverse, and quantos futures in both discrete and continuous-time. In particular, we show that the futures price i"
+      },
+      {
+        "title": "AutoQuant: An Auditable Expert-System Framework for Execution-Constrained Auto-Tuning in Cryptocurrency Perpetual Futures",
+        "id": "http://arxiv.org/abs/2512.22476v1",
+        "published": "2025-12-27",
+        "summary": "Backtests of cryptocurrency perpetual futures are fragile when they ignore microstructure frictions and reuse evaluation windows during parameter search. We study four liquid perpetuals (BTC/USDT, ETH/USDT, SOL/USDT, AVAX/USDT) and quantify how execution delay, funding, fees, and slippage can inflate reported performance. We introduce AutoQuant, an execution-centric, alpha-agnostic framework for a"
+      },
+      {
+        "title": "Optimal Adaptive Market Making: A Theoretical Framework for High-Yield Liquidity Provision in Perpetual Futures Markets",
+        "id": "http://arxiv.org/abs/2607.11888v1",
+        "published": "2026-04-05",
+        "summary": "We develop a rigorous theoretical framework for optimal market making in perpetual futures markets with zero maker fees. We model the market maker's problem as a stochastic optimal control problem on a filtered probability space, where the controls are adaptive bid-ask spreads and inventory hedging decisions across two exchanges. Our contributions include: (i) a PnL decomposition theorem separatin"
+      },
+      {
+        "title": "Fundamentals of Perpetual Futures",
+        "id": "http://arxiv.org/abs/2212.06888v6",
+        "published": "2022-12-13",
+        "summary": "Perpetual futures are the most popular cryptocurrency derivatives. Perpetuals offer leveraged exposure to their underlying without rollover or direct ownership. Unlike fixed-maturity futures, perpetuals are not guaranteed to converge to the spot price. To minimize the gap between perpetual and spot prices, long investors periodically pay shorts a funding rate proportional to this difference. We de"
+      }
+    ]
+  },
+  {
+    "tag": "cta_trend_meta",
+    "entries": [
+      {
+        "title": "Enhancing Time Series Momentum Strategies Using Deep Neural Networks",
+        "id": "http://arxiv.org/abs/1904.04912v3",
+        "published": "2019-04-09",
+        "summary": "While time series momentum is a well-studied phenomenon in finance, common strategies require the explicit definition of both a trend estimator and a position sizing rule. In this paper, we introduce Deep Momentum Networks -- a hybrid approach which injects deep learning based trading rules into the volatility scaling framework of time series momentum. The model also simultaneously learns both tre"
+      },
+      {
+        "title": "Constructing Time-Series Momentum Portfolios with Deep Multi-Task Learning",
+        "id": "http://arxiv.org/abs/2306.13661v1",
+        "published": "2023-06-08",
+        "summary": "A diversified risk-adjusted time-series momentum (TSMOM) portfolio can deliver substantial abnormal returns and offer some degree of tail risk protection during extreme market events. The performance of existing TSMOM strategies, however, relies not only on the quality of the momentum signal but also on the efficacy of the volatility estimator. Yet many of the existing studies have always consider"
+      },
+      {
+        "title": "Time series momentum and contrarian effects in the Chinese stock market",
+        "id": "http://arxiv.org/abs/1702.07374v1",
+        "published": "2017-02-07",
+        "summary": "This paper concentrates on the time series momentum or contrarian effects in the Chinese stock market. We evaluate the performance of the time series momentum strategy applied to major stock indices in mainland China and explore the relation between the performance of time series momentum strategies and some firm-specific characteristics. Our findings indicate that there is a time series momentum "
+      },
+      {
+        "title": "TS-MoCo: Time-Series Momentum Contrast for Self-Supervised Physiological Representation Learning",
+        "id": "http://arxiv.org/abs/2306.06522v1",
+        "published": "2023-06-10",
+        "summary": "Limited availability of labeled physiological data often prohibits the use of powerful supervised deep learning models in the biomedical machine intelligence domain. We approach this problem and propose a novel encoding framework that relies on self-supervised learning with momentum contrast to learn representations from multivariate time-series of various physiological domains without needing lab"
+      },
+      {
+        "title": "DeepUnifiedMom: Unified Time-series Momentum Portfolio Construction via Multi-Task Learning with Multi-Gate Mixture of Experts",
+        "id": "http://arxiv.org/abs/2406.08742v1",
+        "published": "2024-06-13",
+        "summary": "This paper introduces DeepUnifiedMom, a deep learning framework that enhances portfolio management through a multi-task learning approach and a multi-gate mixture of experts. The essence of DeepUnifiedMom lies in its ability to create unified momentum portfolios that incorporate the dynamics of time series momentum across a spectrum of time frames, a feature often missing in traditional momentum s"
+      }
+    ]
+  }
+]

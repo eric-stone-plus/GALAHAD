@@ -1,0 +1,50 @@
+# GALAHAD Futures — paper session defaults (no secrets)
+mode: paper  # paper | live  (live requires explicit env override + kill_switch off)
+
+symbol: BTCUSDT
+market: usdtm  # crypto USDT-M perpetual first
+interval: 1h
+bar_limit: 400
+
+# Capital & margin
+initial_equity: 10000.0
+currency: USDT
+default_leverage: 3.0
+max_leverage: 5.0
+maintenance_margin_rate: 0.005  # 0.5% of notional
+fee_bps: 4.0  # taker 4 bps per side
+# Per-bar funding (perp). Rate > 0 → longs pay shorts. ~0.01%/8h ≈ 1.25e-5 per 1h bar
+# is a tiny production-scale rate; use 1e-4 for visible stress in short paper runs.
+funding_rate_per_bar: 0.0001
+
+# Risk hard caps (execution layer only)
+risk:
+  max_order_notional: 5000.0
+  max_position_notional: 15000.0
+  max_daily_loss: 500.0
+  max_drawdown_pct: 0.15   # session peak-to-trough → force flat (invalidation)
+  kill_switch: true  # true = refuse live; paper always allowed
+  enable_live: false
+
+# Strategy: pre-specified TSMOM (lookback fixed — not a search grid)
+# name options: tsmom (short), tsmom_long (lookback 168 ≈ 7d), dual_ma (plumbing)
+strategy:
+  name: tsmom
+  lookback: 48            # short fixed horizon; use --strategy tsmom_long or --lookback 168
+  max_target_leverage: 1.5
+  min_abs_return: 0.0
+  # dual_ma fallback knobs (ignored when name=tsmom*)
+  fast: 8
+  slow: 21
+
+# Data: auto = vision REST → durable cache → synthetic fixture
+data:
+  source: auto  # auto | fixture | rest | cache | venue
+  fixture_path: data/fixtures/btcusdt_1h.csv
+  fetch_limit: 500
+  # Optional USDT-M template (tried after vision); vision is primary per workspace口径
+  rest_url_template: "https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
+  rest_timeout_sec: 12
+  # cache lands at data/cache/{symbol}_{interval}.csv
+
+output_dir: output

@@ -1,0 +1,150 @@
+[
+  {
+    "tag": "dsr_pbo",
+    "query": "ti:\"deflated sharpe\" OR ti:\"probability of backtest overfitting\" OR abs:\"purged cross-validation\"",
+    "n": 1,
+    "entries": [
+      {
+        "title": "Hopfield Networks for Asset Allocation",
+        "id": "http://arxiv.org/abs/2407.17645v1",
+        "published": "2024-07-24",
+        "summary": "We present the first application of modern Hopfield networks to the problem of portfolio optimization. We performed an extensive study based on combinatorial purged cross-validation over several datasets and compared our results to both traditional and deep-learning-based methods for portfolio selection. Compared to state-of-the-art deep-learning methods such as Long-Short Term Memory networks and Transformers, we find that the proposed approach performs on par or better, while providing faster "
+      }
+    ]
+  },
+  {
+    "tag": "trend_futures",
+    "query": "ti:\"trend following\" AND (futures OR commodity) AND cat:q-fin*",
+    "n": 6,
+    "entries": [
+      {
+        "title": "Follow the Leader: Enhancing Systematic Trend-Following Using Network Momentum",
+        "id": "http://arxiv.org/abs/2501.07135v1",
+        "published": "2025-01-13",
+        "summary": "We present a systematic, trend-following strategy, applied to commodity futures markets, that combines univariate trend indicators with cross-sectional trend indicators that capture so-called {\\em momentum spillover}, which can occur when there is a lead-lag relationship between the trending behaviour of different markets. Our strategy utilises two methods for detecting lead-lag relationships, with a method for computing {\\em network momentum}, to produce a novel trend-following indicator. We us"
+      },
+      {
+        "title": "Two centuries of trend following",
+        "id": "http://arxiv.org/abs/1404.3274v1",
+        "published": "2014-04-12",
+        "summary": "We establish the existence of anomalous excess returns based on trend following strategies across four asset classes (commodities, currencies, stock indices, bonds) and over very long time scales. We use for our studies both futures time series, that exist since 1960, and spot time series that allow us to go back to 1800 on commodities and indices. The overall t-stat of the excess returns is $\\approx 5$ since 1960 and $\\approx 10$ since 1800, after accounting for the overall upward drift of thes"
+      },
+      {
+        "title": "A Decade of Evidence of Trend Following Investing in Cryptocurrencies",
+        "id": "http://arxiv.org/abs/2009.12155v1",
+        "published": "2020-09-25",
+        "summary": "Cryptocurrency markets have many of the characteristics of 20th century commodities markets, making them an attractive candidate for trend following strategies. We present a decade of evidence from the infancy of bitcoin, showcasing the potential investor returns in cryptocurrency trend following, 255% walkforward annualised returns. We find that cryptocurrencies offer similar returns characteristics to commodities with similar risk-adjusted returns, and strong bear market diversification agains"
+      },
+      {
+        "title": "Is Trend Still Your Friend?: A Microstructural Account of the Demise of Short-Term Trend-Following",
+        "id": "http://arxiv.org/abs/2607.01550v1",
+        "published": "2026-07-02",
+        "summary": "Systematic trend following has, on average, been profitable for at least two centuries; yet since approximately 2009, short-term trends have ceased to deliver reliable returns. Using a cross-section of roughly 100 liquid futures contracts spanning 1995-2025, together with an industry-representative CTA proxy, we document the break and characterise its dependence on signal speed and asset class. We evaluate four candidate explanations - capacity constraints, market electronification, a regime cha"
+      },
+      {
+        "title": "Trend-Following Strategies via Dynamic Momentum Learning",
+        "id": "http://arxiv.org/abs/2106.08420v4",
+        "published": "2021-06-15",
+        "summary": "Time series momentum strategies are widely applied in the quantitative financial industry and its academic research has grown rapidly since the work of Moskowitz, Ooi and Pedersen (2012). However, trading signals are usually obtained via simple observation of past return measurements. In this article we study the benefits of incorporating dynamic econometric models to sequentially learn the time-varying importance of different look-back periods for individual assets. By the use of a dynamic bina"
+      },
+      {
+        "title": "Beyond Trend Following: Deep Learning for Market Trend Prediction",
+        "id": "http://arxiv.org/abs/2407.13685v1",
+        "published": "2024-06-10",
+        "summary": "Trend following and momentum investing are common strategies employed by asset managers. Even though they can be helpful in the proper situations, they are limited in the sense that they work just by looking at past, as if we were driving with our focus on the rearview mirror. In this paper, we advocate for the use of Artificial Intelligence and Machine Learning techniques to predict future market trends. These predictions, when done properly, can improve the performance of asset managers by inc"
+      }
+    ]
+  },
+  {
+    "tag": "crypto_perp",
+    "query": "ti:\"perpetual\" AND (futures OR funding) AND (crypto OR bitcoin)",
+    "n": 5,
+    "entries": [
+      {
+        "title": "Fundamentals of Perpetual Futures",
+        "id": "http://arxiv.org/abs/2212.06888v6",
+        "published": "2022-12-13",
+        "summary": "Perpetual futures are the most popular cryptocurrency derivatives. Perpetuals offer leveraged exposure to their underlying without rollover or direct ownership. Unlike fixed-maturity futures, perpetuals are not guaranteed to converge to the spot price. To minimize the gap between perpetual and spot prices, long investors periodically pay shorts a funding rate proportional to this difference. We derive no-arbitrage prices for perpetual futures in frictionless markets and bounds in markets with tr"
+      },
+      {
+        "title": "Resolution-Aware Perpetual Futures on Binary Prediction Markets: Failure Modes and Mechanical Stress Tests Using Polymarket Data",
+        "id": "http://arxiv.org/abs/2605.10400v2",
+        "published": "2026-05-11",
+        "summary": "We study whether crypto-style perpetual-futures mechanics can be applied to a binary event claim that ultimately pays 0 or 1. A synthetic long entered at price p0 with collateral xp0/L has terminal equity -xp0(1-1/L) when the claim pays 0, if the position survives to resolution without a top-up, close, or conversion. Thus any L > 1 creates an adverse-outcome account shortfall under these conditions, independent of the pre-resolution mark. We also derive a funding trilemma: basis-only funding los"
+      },
+      {
+        "title": "Where does the criticality live? Early-warning signals are event-heterogeneous across seven crypto-perpetual liquidation cascades",
+        "id": "http://arxiv.org/abs/2607.27070v1",
+        "published": "2026-07-29",
+        "summary": "Do crypto perpetual-futures crashes carry a reproducible early-warning fingerprint of a critical transition, and in which state variable? We study seven major BTC liquidation cascades (2022-2025, including the record 19B USD event of 10 October 2025) using minute-level price and 5-minute leverage/order-flow data. On detrended residuals we compute rolling variance and lag-1 autocorrelation and test their pre-cascade trend with the Kendall-tau statistic, sweeping 39 analysis configurations per var"
+      },
+      {
+        "title": "Exploring the Impact: How Decentralized Exchange Designs Shape Traders' Behavior on Perpetual Future Contracts",
+        "id": "http://arxiv.org/abs/2402.03953v4",
+        "published": "2024-02-06",
+        "summary": "In this paper, we analyze traders' behavior within both centralized exchanges (CEXs) and decentralized exchanges (DEXs), focusing on the volatility of Bitcoin prices and the trading activity of investors engaged in perpetual future contracts. We categorize the architecture of perpetual future exchanges into three distinct models, each exhibiting unique patterns of trader behavior in relation to trading volume, open interest, liquidation, and leverage. Our detailed examination of DEXs, especially"
+      },
+      {
+        "title": "Reconciling Open Interest with Traded Volume in Perpetual Swaps",
+        "id": "http://arxiv.org/abs/2310.14973v2",
+        "published": "2023-10-23",
+        "summary": "Perpetual swaps are derivative contracts that allow traders to speculate on, or hedge, the price movements of cryptocurrencies. Unlike futures contracts, perpetual swaps have no settlement or expiration in the traditional sense. The funding rate acts as the mechanism that tethers the perpetual swap to its underlying with the help of arbitrageurs. Open interest, in the context of perpetual swaps and derivative contracts in general, refers to the total number of outstanding contracts at a given po"
+      }
+    ]
+  },
+  {
+    "tag": "margin_liq",
+    "query": "abs:\"liquidation\" AND futures AND (margin OR leverage) AND cat:q-fin*",
+    "n": 8,
+    "entries": [
+      {
+        "title": "Liquidation, Leverage and Optimal Margin in Bitcoin Futures Markets",
+        "id": "http://arxiv.org/abs/2102.04591v1",
+        "published": "2021-02-09",
+        "summary": "Using the generalized extreme value theory to characterize tail distributions, we address liquidation, leverage, and optimal margins for bitcoin long and short futures positions. The empirical analysis of perpetual bitcoin futures on BitMEX shows that (1) daily forced liquidations to out- standing futures are substantial at 3.51%, and 1.89% for long and short; (2) investors got forced liquidation do trade aggressively with average leverage of 60X; and (3) exchanges should elevate current 1% marg"
+      },
+      {
+        "title": "Impact of arbitrage between leveraged ETF and futures on market liquidity during market crash",
+        "id": "http://arxiv.org/abs/2603.05862v1",
+        "published": "2026-03-06",
+        "summary": "Leveraged ETFs (L-ETFs) are exchange-traded funds that achieve price movements several times greater than an index by holding index-linked futures such as Nikkei Stock Average Index futures. It is known that when the price of an L-ETF falls, the L-ETF uses the liquidity of futures to limit the decline through arbitrage trading. Conversely, when the price of a futures contract falls, the futures contract uses the liquidity of the L-ETF to limit its decline. However, the impact of arbitrage tradin"
+      },
+      {
+        "title": "Hedging with Bitcoin Futures: The Effect of Liquidation Loss Aversion and Aggressive Trading",
+        "id": "http://arxiv.org/abs/2101.01261v2",
+        "published": "2021-01-04",
+        "summary": "We consider the hedging problem where a futures position can be automatically liquidated by the exchange without notice. We derive a semi-closed form for an optimal hedging strategy with dual objectives - to minimise both the variance of the hedged portfolio and the probability of liquidations due to insufficient collateral. The optimal solution depends on the statistical characteristics of the spot and futures extreme returns and parameters that characterise the hedger by loss aversion, choice "
+      },
+      {
+        "title": "Resolution-Aware Perpetual Futures on Binary Prediction Markets: Failure Modes and Mechanical Stress Tests Using Polymarket Data",
+        "id": "http://arxiv.org/abs/2605.10400v2",
+        "published": "2026-05-11",
+        "summary": "We study whether crypto-style perpetual-futures mechanics can be applied to a binary event claim that ultimately pays 0 or 1. A synthetic long entered at price p0 with collateral xp0/L has terminal equity -xp0(1-1/L) when the claim pays 0, if the position survives to resolution without a top-up, close, or conversion. Thus any L > 1 creates an adverse-outcome account shortfall under these conditions, independent of the pre-resolution mark. We also derive a funding trilemma: basis-only funding los"
+      },
+      {
+        "title": "Exploring the Impact: How Decentralized Exchange Designs Shape Traders' Behavior on Perpetual Future Contracts",
+        "id": "http://arxiv.org/abs/2402.03953v4",
+        "published": "2024-02-06",
+        "summary": "In this paper, we analyze traders' behavior within both centralized exchanges (CEXs) and decentralized exchanges (DEXs), focusing on the volatility of Bitcoin prices and the trading activity of investors engaged in perpetual future contracts. We categorize the architecture of perpetual future exchanges into three distinct models, each exhibiting unique patterns of trader behavior in relation to trading volume, open interest, liquidation, and leverage. Our detailed examination of DEXs, especially"
+      },
+      {
+        "title": "Smile Modelling in Commodity Markets",
+        "id": "http://arxiv.org/abs/1808.09685v2",
+        "published": "2018-08-29",
+        "summary": "We present a stochastic-local volatility model for derivative contracts on commodity futures able to describe forward-curve and smile dynamics with a fast calibration to liquid market quotes. A parsimonious parametrization is introduced to deal with the limited number of options quoted in the market. Cleared commodity markets for futures and options are analyzed to include in the pricing framework specific trading clauses and margining procedures. Numerical examples for calibration and pricing a"
+      },
+      {
+        "title": "Yields: The Galapagos Syndrome Of Cryptofinance",
+        "id": "http://arxiv.org/abs/2202.10265v1",
+        "published": "2022-02-21",
+        "summary": "In this chapter structures that generate yield in cryptofinance will be analyzed and related to leverage. While the majority of crypto-assets do not have intrinsic yields in and of themselves, similar to cash holdings of fiat currency, revolutionary innovation based on smart contracts, which enable decentralised finance, does generate return. Examples include lending or providing liquidity to an automated market maker on a decentralised exchange, as well as performing block formation in a proof "
+      },
+      {
+        "title": "A Flexible Commodity Skew Model with Maturity Effects",
+        "id": "http://arxiv.org/abs/2212.07972v1",
+        "published": "2022-12-15",
+        "summary": "We propose a non-parametric extension with leverage functions to the Andersen commodity curve model. We calibrate this model to market data for WTI and NG including option skew at the standard maturities. While the model can be calibrated by an analytical formula for the deterministic rate case, the stochastic rate case demands estimation of an expectation for which we employ Monte Carlo simulation. We find that the market smile is captured for the deterministic rate case; and with relatively lo"
+      }
+    ]
+  }
+]

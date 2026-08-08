@@ -1,0 +1,22 @@
+{
+  "pc": 0.30,
+  "isolation_days": 400,
+  "dsr": 0.97,
+  "pbo": 0.03,
+  "zero_shot_r2": 0.05,
+  "ebh_fdr": 0.02,
+  "n_seeds": 20,
+  "worst_path_alpha": 0.01,
+  "pov": 0.08,
+  "z_comp": 1.5,
+  "basis_pct": 0.20,
+  "calib_window": 90,
+  "paper_months": 6,
+  "paper_trades": 80,
+  "deviation": 0.10,
+  "win_rate": 0.56,
+  "live_months": 3,
+  "sharpe_decay": 0.12,
+  "daily_orders": 15000,
+  "_note": "GO 复现样例：gate0 三腿（turnover/aum/friction）由流水线实测补齐，见 README 门控一节"
+}

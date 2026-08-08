@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantkit"
+version = "0.3.0"
+description = "Shared quant research toolkit for Private/quant-analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+# Runtime deps live in requirements.txt (managed with the shared venv).
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quantkit*"]

@@ -1,0 +1,12 @@
+{
+  "ts_saved": "2026-08-08T13:05:33Z",
+  "symbol": "SOLUSDT",
+  "interval": "1h",
+  "n_rows": 500,
+  "venue": "binance_vision",
+  "rest_url": "https://data-api.binance.vision/api/v3/klines",
+  "first_ts": "2026-07-18T18:00:00+00:00",
+  "last_ts": "2026-08-08T13:00:00+00:00",
+  "last_close": 75.51,
+  "sample_kind": "venue"
+}
