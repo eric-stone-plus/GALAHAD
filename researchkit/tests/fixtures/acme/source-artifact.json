@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_type": "source",
+  "artifact_id": "src_2db126d686336a351f042dc14ec4e098f2cf1eee30d0b822c772a70d10642bd6",
+  "provider": "GALAHAD synthetic fixture",
+  "canonical_uri": "fixture://acme/2025-fy",
+  "query": "entity=ACME&period=2025-FY",
+  "source_published_at": "2026-02-01T12:00:00Z",
+  "source_available_at": "2026-02-01T12:00:00Z",
+  "retrieved_at": "2026-02-01T12:00:00Z",
+  "as_of_cutoff": "2026-02-01T23:59:59Z",
+  "identifiers": {
+    "entity_id": "ACME",
+    "security_id": "XNYS:ACME",
+    "accession": null
+  },
+  "timezone": "UTC",
+  "currency": "USD",
+  "unit": "USD millions",
+  "adjustment_basis": "synthetic-reported",
+  "rights_tag": "CC0-1.0 synthetic fixture",
+  "content_hash": "sha256:58ee291890ab6cf8cc18b86afc13dacc4e46bd3b902b6c5e0cd90bcf6545a434",
+  "snapshot_path": "tests/fixtures/acme/source.json"
+}

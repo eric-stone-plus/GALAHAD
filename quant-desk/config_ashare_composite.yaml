@@ -1,0 +1,36 @@
+# quant_desk — A-shares backtest configuration (composite + monthly)
+
+name: a_share_paper
+currency: CNY
+initial_cash: 1000000
+cost_tier: mid
+
+universe:
+  - '600519'  # Guizhou Moutai
+  - '000858'  # Wuliangye Yibin
+  - '601318'  # Ping An Insurance
+  - '600036'  # China Merchants Bank
+  - '000333'  # Midea Group
+  - '600900'  # Yangtze Power
+  - '601012'  # LONGi Green Energy
+  - '002415'  # Hikvision
+  - '600276'  # Hengrui Medicine
+  - '000001'  # Ping An Bank
+  - '601888'  # China Tourism Group Duty Free
+  - '300750'  # Contemporary Amperex Technology
+
+selection:
+  mode: composite
+  top_n: 5
+  weight_scheme: equal
+  max_weight: 0.30
+  history_start: '2020-01-01'
+
+trading:
+  market: cn
+  provider: akshare
+  rebalance_band: 0.02
+
+backfill:
+  start: '2023-01-01'
+  rebalance: M

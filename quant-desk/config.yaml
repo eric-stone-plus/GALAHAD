@@ -1,0 +1,55 @@
+# quant_desk — Full investment research/trading/management configuration
+
+name: quant_desk_paper
+currency: USD
+initial_cash: 1000000
+# Cost discipline (quiz2 r3): full-coverage bilateral friction uses COST_TIERS (low 0.2% / mid 0.4% / high 0.5%),
+# No "万五" (0.05%) default allowed; paper ledger single-side fee = tier/2 (scripts/_common.resolve_fee_bps).
+cost_tier: mid
+
+# Stock selection
+universe:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMZN
+  - GOOGL
+  - META
+  - TSLA
+  - AMD
+  - AVGO
+  - TSM
+  - SMCI
+  - ASML
+  - MU
+  - JPM
+  - XOM
+  - UNH
+  - JNJ
+  - V
+  - MA
+  - COST
+
+selection:
+  mode: momentum         # momentum | quality_trend | mean_reversion | composite
+  top_n: 15
+  weight_scheme: equal     # equal | score
+  max_weight: 0.30
+  min_price: 10.0
+  max_vol_ann: 1.0
+  require_uptrend: false
+  history_start: "2020-01-01"
+
+# Trading (paper)
+trading:
+  rebalance_band: 0.02     # Rebalance only if weight deviation exceeds 2%
+  market: us
+  provider: yahoo
+
+# Backtesting simulation (historical lifecycle)
+backfill:
+  start: "2023-01-01"
+  rebalance: Q             # D | W | M | Q
+
+# Benchmark
+benchmark: "^GSPC"

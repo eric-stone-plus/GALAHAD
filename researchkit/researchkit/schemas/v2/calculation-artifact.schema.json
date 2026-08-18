@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galahad.local/schemas/v2/calculation-artifact.schema.json",
+  "title": "CalculationArtifact v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "artifact_id",
+    "calculation_type",
+    "entity_id",
+    "as_of_cutoff",
+    "inputs",
+    "lineage",
+    "method",
+    "parameters",
+    "code_commit",
+    "environment",
+    "result",
+    "output_hash",
+    "warnings",
+    "reconciliation",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "artifact_type": {"const": "calculation"},
+    "artifact_id": {"type": "string", "pattern": "^calc_[0-9a-f]{64}$"},
+    "calculation_type": {"type": "string", "minLength": 1},
+    "entity_id": {"type": "string", "minLength": 1},
+    "as_of_cutoff": {"type": "string", "format": "date-time"},
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "artifact_hash", "role"],
+        "properties": {
+          "artifact_id": {"type": "string", "minLength": 1},
+          "artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "role": {"enum": ["subject", "assumption", "availability", "comparison"]}
+        }
+      }
+    },
+    "lineage": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parameter_pointer",
+          "artifact_id",
+          "artifact_hash",
+          "target",
+          "json_pointer",
+          "reported_value",
+          "normalization"
+        ],
+        "properties": {
+          "parameter_pointer": {"type": "string", "pattern": "^/parameters(?:/|$)"},
+          "artifact_id": {"type": "string", "minLength": 1},
+          "artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "target": {"enum": ["artifact", "snapshot"]},
+          "json_pointer": {"type": "string", "pattern": "^(?:/|$)"},
+          "reported_value": {},
+          "normalization": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation"],
+            "properties": {
+              "operation": {"enum": ["identity", "scale", "negate"]},
+              "factor": {"type": "number"}
+            }
+          },
+          "availability_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["artifact_id", "artifact_hash", "target", "json_pointer"],
+            "properties": {
+              "artifact_id": {"type": "string", "minLength": 1},
+              "artifact_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "target": {"enum": ["artifact", "snapshot"]},
+              "json_pointer": {"type": "string", "pattern": "^(?:/|$)"}
+            }
+          },
+          "available_at": {"type": "string", "format": "date-time"},
+          "accession": {"type": ["string", "null"]},
+          "reported_concept": {"type": "string", "minLength": 1},
+          "reported_unit": {"type": "string", "minLength": 1},
+          "amendment_sequence": {"type": "integer", "minimum": 0},
+          "restatement_status": {
+            "enum": ["not-identified", "original", "amended", "restated", "not-applicable"]
+          }
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "parameters": {"type": "object"},
+    "code_commit": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "lock_hash"],
+      "properties": {
+        "python": {"type": "string", "minLength": 1},
+        "lock_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "result": {"type": "object"},
+    "output_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "warnings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "metric", "residual", "tolerance"],
+      "properties": {
+        "status": {"enum": ["pass", "fail"]},
+        "metric": {"const": "max-relative-residual"},
+        "residual": {"type": "number"},
+        "tolerance": {"type": "number", "minimum": 0},
+        "details": {"type": "string"}
+      }
+    },
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "galahad-researchkit"
+version = "0.2.0"
+description = "Auditable research contracts and valuation arithmetic for GALAHAD"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<10"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["researchkit*"]
+
+[tool.setuptools.package-data]
+researchkit = ["schemas/v1/*.schema.json", "schemas/v2/*.schema.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

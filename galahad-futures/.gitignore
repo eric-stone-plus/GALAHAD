@@ -1,0 +1,16 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.venv/
+output/*
+!output/.gitkeep
+# keep venue cache durable for offline re-runs; ignore only temp
+data/cache/*.tmp
+# data/cache/*.csv is intentional durable venue history (not secrets)
+*.parquet
+!data/fixtures/**
+.DS_Store
+state/  # runtime cycle state, not source

@@ -1,0 +1,38 @@
+# quant_desk — A-share lifecycle (baostock data)
+name: ashare_composite
+currency: CNY
+initial_cash: 1000000
+cost_tier: mid
+
+universe:
+  - "600519"  # Kweichow Moutai
+  - "000858"  # Wuliangye
+  - "601318"  # Ping An Insurance
+  - "600036"  # China Merchants Bank
+  - "000333"  # Midea Group
+  - "600900"  # China Yangtze Power
+  - "002415"  # Hikvision
+  - "600276"  # Hengrui Medicine
+  - "000001"  # Ping An Bank
+  - "601888"  # China Tourism Group Duty Free
+  - "300750"  # Contemporary Amperex Technology Co., Limited
+  - "002594"  # BYD
+
+selection:
+  mode: composite
+  top_n: 5
+  weight_scheme: equal
+  max_weight: 0.30
+  min_price: 5.0
+  max_vol_ann: 1.0
+  require_uptrend: false
+  history_start: "2020-01-01"
+
+trading:
+  rebalance_band: 0.02
+  market: cn
+  provider: baostock
+
+backfill:
+  start: "2023-01-01"
+  rebalance: M

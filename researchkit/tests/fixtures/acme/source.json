@@ -1,0 +1,63 @@
+{
+  "entity": "ACME",
+  "currency": "USD",
+  "unit": "USD millions",
+  "period_basis": "FY",
+  "statements": [
+    {
+      "period_end": "2024-12-31",
+      "revenue": 100.0,
+      "cost_of_revenue": 60.0,
+      "operating_expenses": 20.0,
+      "operating_income": 20.0,
+      "net_income": 15.0,
+      "cash_from_operations": 18.0,
+      "capital_expenditure": 5.0,
+      "total_assets": 200.0,
+      "total_liabilities": 120.0,
+      "total_equity": 80.0,
+      "cash": 20.0,
+      "debt": 50.0
+    },
+    {
+      "period_end": "2025-12-31",
+      "revenue": 110.0,
+      "cost_of_revenue": 66.0,
+      "operating_expenses": 22.0,
+      "operating_income": 22.0,
+      "net_income": 16.5,
+      "cash_from_operations": 20.0,
+      "capital_expenditure": 5.5,
+      "total_assets": 220.0,
+      "total_liabilities": 132.0,
+      "total_equity": 88.0,
+      "cash": 22.0,
+      "debt": 55.0
+    }
+  ],
+  "dcf": {
+    "forecasts": [
+      {"period": "2026", "unlevered_fcf": 15.0, "discount_period": 1.0},
+      {"period": "2027", "unlevered_fcf": 16.0, "discount_period": 2.0}
+    ],
+    "wacc": 0.09,
+    "terminal_growth": 0.025,
+    "net_debt": 33.0,
+    "non_operating_assets": 0.0,
+    "diluted_shares": 10.0,
+    "wacc_values": [0.08, 0.09, 0.10],
+    "terminal_growth_values": [0.02, 0.025, 0.03]
+  },
+  "comps": {
+    "peers": [
+      {"name": "P1", "included": true, "numerator": 80.0, "denominator": 10.0},
+      {"name": "P2", "included": true, "numerator": 100.0, "denominator": 10.0},
+      {"name": "P3", "included": true, "numerator": 120.0, "denominator": 10.0}
+    ],
+    "subject_metric": 22.0,
+    "basis": "enterprise",
+    "diluted_shares": 10.0,
+    "net_debt": 33.0,
+    "non_operating_assets": 0.0
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "ts": "2026-08-04T22:04:44Z",
+  "status": "ok",
+  "source_used": "fixture",
+  "sample_kind": "synthetic_fixture",
+  "data_note": null,
+  "bars": 120,
+  "symbol": "BTCUSDT",
+  "funding_rate_per_bar": 0.0001,
+  "n_variants": 5,
+  "grid": [
+    {
+      "fast": 5,
+      "slow": 20,
+      "final_equity": 12413.88336898398,
+      "n_fills": 101,
+      "sharpe_ann_approx": 97.62973548617968,
+      "liquidated": false
+    },
+    {
+      "fast": 8,
+      "slow": 21,
+      "final_equity": 12238.202858372868,
+      "n_fills": 100,
+      "sharpe_ann_approx": 85.31534418772092,
+      "liquidated": false
+    },
+    {
+      "fast": 10,
+      "slow": 30,
+      "final_equity": 11752.58309752614,
+      "n_fills": 91,
+      "sharpe_ann_approx": 61.35141513875527,
+      "liquidated": false
+    },
+    {
+      "fast": 12,
+      "slow": 48,
+      "final_equity": 10975.075963205725,
+      "n_fills": 73,
+      "sharpe_ann_approx": 31.927797062139977,
+      "liquidated": false
+    },
+    {
+      "fast": 20,
+      "slow": 50,
+      "final_equity": 8730.765833189575,
+      "n_fills": 33,
+      "sharpe_ann_approx": -63.0437870535879,
+      "liquidated": false
+    }
+  ],
+  "selected": {
+    "fast": 8,
+    "slow": 21,
+    "final_equity": 12238.202858372868,
+    "sharpe_ann_approx": 85.31534418772092,
+    "sr_per_bar": 0.9115386631734081
+  },
+  "n_trials_for_dsr": 5,
+  "deflated_sharpe_ratio": 0.7269297070071224,
+  "pbo": 0.0,
+  "pbo_error": null,
+  "pbo_n_blocks": 8,
+  "returns_len": 119,
+  "policy_flags": [
+    "SYNTHETIC_FIXTURE_NOT_EDGE_CLAIM",
+    "GATES_WEAK_PASS_ON_THIS_SAMPLE"
+  ],
+  "doctrine": "Dual-MA paper equity is plumbing until DSR>0 and PBO<=0.5 under honest grids on venue history; synthetic fixture alone is never an edge claim. see docs/strategy_research.md and public strategy_foundations.md"
+}

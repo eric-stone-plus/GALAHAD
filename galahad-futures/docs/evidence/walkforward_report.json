@@ -1,0 +1,91 @@
+{
+  "ts": "2026-08-04T17:03:06Z",
+  "status": "ok",
+  "strategy": "tsmom",
+  "strategy_kwargs": {
+    "fast": 8,
+    "slow": 21,
+    "lookback": 48,
+    "max_target_leverage": 1.5,
+    "min_abs_return": 0.0
+  },
+  "source_used": "cache",
+  "sample_kind": "venue",
+  "data_note": null,
+  "bars": 500,
+  "symbol": "BTCUSDT",
+  "n_folds": 4,
+  "folds": [
+    {
+      "fold": 0,
+      "train_n": 146,
+      "test_n": 87,
+      "test_start": "2026-07-21T03:00:00+00:00",
+      "test_end": "2026-07-24T17:00:00+00:00",
+      "final_equity": 10304.81741972177,
+      "n_fills": 87,
+      "n_fills_oos": 87,
+      "total_funding": 25.440097019319722,
+      "n_funding_events": 87,
+      "sharpe_oos": 0.08897939989389478,
+      "liquidated": false,
+      "n_oos_returns": 86
+    },
+    {
+      "fold": 1,
+      "train_n": 233,
+      "test_n": 87,
+      "test_start": "2026-07-24T18:00:00+00:00",
+      "test_end": "2026-07-28T08:00:00+00:00",
+      "final_equity": 9617.84578188903,
+      "n_fills": 87,
+      "n_fills_oos": 87,
+      "total_funding": -29.92055646535043,
+      "n_funding_events": 87,
+      "sharpe_oos": -0.11308256983894166,
+      "liquidated": false,
+      "n_oos_returns": 86
+    },
+    {
+      "fold": 2,
+      "train_n": 320,
+      "test_n": 87,
+      "test_start": "2026-07-28T09:00:00+00:00",
+      "test_end": "2026-07-31T23:00:00+00:00",
+      "final_equity": 10054.933153011045,
+      "n_fills": 87,
+      "n_fills_oos": 87,
+      "total_funding": -32.54795702715565,
+      "n_funding_events": 87,
+      "sharpe_oos": 0.014748684479146594,
+      "liquidated": false,
+      "n_oos_returns": 86
+    },
+    {
+      "fold": 3,
+      "train_n": 407,
+      "test_n": 87,
+      "test_start": "2026-08-01T00:00:00+00:00",
+      "test_end": "2026-08-04T14:00:00+00:00",
+      "final_equity": 9626.596507905677,
+      "n_fills": 86,
+      "n_fills_oos": 86,
+      "total_funding": -20.73473142889857,
+      "n_funding_events": 87,
+      "sharpe_oos": -0.11047050896047328,
+      "liquidated": false,
+      "n_oos_returns": 86
+    }
+  ],
+  "oos_returns_len": 344,
+  "oos_sharpe": -0.02498618761998022,
+  "deflated_sharpe_ratio": 0.3217898645460829,
+  "pbo": 1.0,
+  "pbo_error": null,
+  "policy_flags": [
+    "VENUE_OR_CACHE_SAMPLE",
+    "PBO_HIGH_RED"
+  ],
+  "funding_rate_per_bar": 0.0001,
+  "doctrine": "Walk-forward OOS for a pre-specified rule; not a claim of edge. PBO vs dual_ma is comparative only."
+}

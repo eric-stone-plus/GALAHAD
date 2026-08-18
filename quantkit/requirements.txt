@@ -1,0 +1,70 @@
+# Shared quant toolchain (Python 3.12). Install into quant/.venv only.
+#   quant-python -m pip install -r requirements.txt
+#   quant-python -m pip install -e .
+
+# --- vectorized parameter sweeps (optional; quantkit.sweep) ---
+# vectorbt is fair-code (Apache-2.0 + Commons Clause): internal research
+# only, never resold as a standalone product. Pinned to 1.0.0 — the
+# 1.1.0 line has a numba JIT regression ("non-precise type array(pyobject)")
+# in from_signals under the pinned numba/numpy pair.
+vectorbt==1.0.0
+
+# --- core data stack ---
+numpy
+pandas
+polars
+pyarrow
+duckdb
+scipy
+statsmodels
+scikit-learn
+matplotlib
+seaborn
+plotly
+openpyxl
+xlsxwriter
+xlrd
+jupyterlab
+ipykernel
+ipywidgets
+linearmodels
+arch
+formulaic
+patsy
+sqlalchemy
+great-tables
+tqdm
+rich
+pyyaml
+python-dotenv
+connectorx
+reportlab
+requests
+
+# --- market data ---
+yfinance
+finnhub-python
+akshare
+baostock
+easyquotation
+mootdx
+ccxt
+
+# --- quant research ---
+quantstats
+pandas-ta
+backtrader
+# vectorbt  # optional; currently fails on some Intel Macs (llvmlite rebuild). Use quantkit.backtest instead.
+
+# --- ML ---
+lightgbm
+xgboost
+
+# --- apps ---
+streamlit
+
+# --- tests ---
+pytest
+
+# --- shared library ---
+# install editable: pip install -e .

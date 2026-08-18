@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galahad.local/schemas/v1/calculation-artifact.schema.json",
+  "title": "CalculationArtifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "artifact_id",
+    "calculation_type",
+    "inputs",
+    "method",
+    "parameters",
+    "code_commit",
+    "environment",
+    "result",
+    "output_hash",
+    "warnings",
+    "reconciliation",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "artifact_type": {"const": "calculation"},
+    "artifact_id": {"type": "string", "pattern": "^calc_[0-9a-f]{64}$"},
+    "calculation_type": {"type": "string", "minLength": 1},
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "content_hash"],
+        "properties": {
+          "artifact_id": {"type": "string", "minLength": 1},
+          "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "json_pointer": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "parameters": {"type": "object"},
+    "code_commit": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "lock_hash"],
+      "properties": {
+        "python": {"type": "string", "minLength": 1},
+        "lock_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "result": {"type": "object"},
+    "output_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "warnings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "residual", "tolerance"],
+      "properties": {
+        "status": {"enum": ["pass", "fail"]},
+        "residual": {"type": "number"},
+        "tolerance": {"type": "number", "minimum": 0},
+        "details": {"type": "string"}
+      }
+    },
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

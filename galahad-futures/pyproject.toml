@@ -1,0 +1,28 @@
+[project]
+name = "galahad-futures"
+version = "0.1.0"
+description = "GALAHAD private USDT-M futures paper substrate (margin, risk gate, dual-MA targets)"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.12"
+dependencies = [
+  "pandas",
+  "numpy",  # used directly by galahad_futures.statistics (DSR/PBO)
+  "pyarrow",  # parquet cache tier (P0 offline slice); imported lazily in data.py
+  "pyyaml",
+  "pytest",
+]
+
+[project.optional-dependencies]
+# Event-driven execution backend (--engine nautilus). Pinned exact:
+# 1.231.0 is the final stable 1.x line; upgrades are deliberate reviews
+# accompanied by a parity run (scripts/run_parity.py).
+nautilus = [
+  "nautilus_trader==1.231.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["galahad_futures*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
