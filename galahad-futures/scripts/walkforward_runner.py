@@ -9,6 +9,7 @@ import json
 import math
 import sys
 import traceback
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -40,6 +41,15 @@ MIN_TRAIN = 150
 WARMUP = 50  # bars of indicator warmup before OOS starts counting
 
 
+def synthetic_fixture_seed(symbol: str) -> int:
+    """Process-stable seed for the synthetic fallback of ``symbol``.
+
+    ``hash()`` is randomized per interpreter (PYTHONHASHSEED), so it must
+    not seed anything meant to be reproducible across runs.
+    """
+    return zlib.crc32(symbol.upper().encode("utf-8")) % 10000
+
+
 def load_symbol_data(symbol: str) -> tuple[pd.DataFrame, str]:
     """Load bars for a symbol: cache → REST → fixture fallback."""
     cfg = load_config()
@@ -62,24 +72,55 @@ def load_symbol_data(symbol: str) -> tuple[pd.DataFrame, str]:
         return bars, source_used
     except Exception as e:
         print(f"  ⚠ Failed to load {symbol}: {e}")
-        # Generate synthetic fixture as last resort
-        fix_path = PROJECT_ROOT / "data" / "fixtures" / f"{symbol.lower()}_1h.csv"
+        # Deterministic synthetic fixture as last resort. Written under
+        # output/ (runtime scratch): data/fixtures holds committed canonical
+        # fixtures and must never be overwritten by ad-hoc synthetic data.
+        fix_path = OUTPUT_DIR / f"synthetic_{symbol.lower()}_1h.csv"
         price_map = {"BTCUSDT": 60000, "ETHUSDT": 3500, "SOLUSDT": 150, "BNBUSDT": 600}
         start = price_map.get(symbol, 1000)
-        write_synthetic_fixture(fix_path, n=500, start_price=start, seed=hash(symbol) % 10000)
+        seed = synthetic_fixture_seed(symbol)
+        write_synthetic_fixture(fix_path, n=500, start_price=start, seed=seed)
         bars = load_bars(source="fixture", fixture_path=str(fix_path), project_root=PROJECT_ROOT)
         return bars[0], "fixture_synthetic"
 
 
-def compute_metrics(equity_curve: list[dict], initial_equity: float) -> dict:
-    """Compute performance metrics from equity curve entries."""
-    # Normalize: extract float equity values from dict entries or plain floats
-    eq_raw = []
+def _equity_values(equity_curve: list, initial_equity: float) -> list[float]:
+    """Extract float equity values from dict entries or plain floats."""
+    values: list[float] = []
     for e in equity_curve:
         if isinstance(e, dict):
-            eq_raw.append(float(e.get("equity", e.get("eq", initial_equity))))
+            values.append(float(e.get("equity", e.get("eq", initial_equity))))
         else:
-            eq_raw.append(float(e))
+            values.append(float(e))
+    return values
+
+
+def chain_oos_equity_curves(
+    oos_equity_curves: list[list], initial_equity: float
+) -> list[float]:
+    """Chain per-fold OOS equity curves into one compounded curve.
+
+    Every fold restarts from ``initial_equity`` after its own warmup, so
+    the curves cannot be aggregated by splicing levels: that would inject
+    a fake jump at each fold boundary (fold k's final equity vs the next
+    fold's reset) and drop earlier folds' compounded P&L from the totals.
+    Chaining on per-bar returns keeps each fold's percentage path and
+    compounds across folds.
+    """
+    chained = [float(initial_equity)]
+    for curve in oos_equity_curves:
+        eq = _equity_values(curve, initial_equity)
+        for prev, curr in zip(eq, eq[1:]):
+            if prev > 1e-9:
+                chained.append(chained[-1] * curr / prev)
+            else:
+                chained.append(curr)
+    return chained
+
+
+def compute_metrics(equity_curve: list[dict], initial_equity: float) -> dict:
+    """Compute performance metrics from equity curve entries."""
+    eq_raw = _equity_values(equity_curve, initial_equity)
     if not equity_curve or len(eq_raw) < 2:
         return {
             "total_return_pct": 0.0,
@@ -184,10 +225,12 @@ def run_walkforward_single(
         folds_results.append(metrics)
         oos_equity_curves.append(oos_eq)
 
-    # Aggregate OOS metrics across folds
-    all_oos_eq = []
-    for curve in oos_equity_curves:
-        all_oos_eq.extend(curve)
+    # Aggregate OOS metrics across folds. Each fold restarts at
+    # initial_equity after its own warmup, so chain the per-fold curves on
+    # returns — never splice levels (fake boundary jumps, lost compounding).
+    all_oos_eq = chain_oos_equity_curves(
+        oos_equity_curves, cfg.get("initial_equity", 10000)
+    )
 
     agg = compute_metrics(all_oos_eq, cfg.get("initial_equity", 10000))
 

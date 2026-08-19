@@ -8,9 +8,10 @@ engines around the results — is fine; do not wrap vectorbt in a
 standalone product for resale. See docs/roadmap.md for the evaluation
 context.
 
-Optional dependency: ``vectorbt`` (the shared venv pins it via
-requirements.txt). Import this module lazily from research code;
-``import quantkit.sweep`` raises a clear error when vectorbt is absent.
+Optional dependency: ``vectorbt`` (pinned to 1.0.0 via requirements.txt
+and the ``sweep`` extra in pyproject.toml). Import this module lazily
+from research code; ``import quantkit.sweep`` raises a clear error when
+vectorbt is absent.
 
 Exposure convention: sweep statistics are computed at 1x exposure. The
 sweeps run cash-constrained vbt portfolios — no margin, no leverage — so
@@ -34,8 +35,9 @@ try:
     import vectorbt as vbt
 except ImportError as exc:  # pragma: no cover - depends on venv contents
     raise ImportError(
-        "quantkit.sweep requires the optional dependency vectorbt "
-        "(pip install vectorbt==1.1.0 into the shared venv)"
+        "quantkit.sweep requires the optional dependency vectorbt, pinned "
+        "to 1.0.0 (pip install vectorbt==1.0.0, or "
+        "pip install -e './quantkit[sweep]')"
     ) from exc
 
 

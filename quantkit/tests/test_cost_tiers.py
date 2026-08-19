@@ -2,8 +2,11 @@
 
 Contracts:
   - COST_TIERS is the two-sided all-in rate table (low 0.2% / mid 0.4% /
-    high 0.5% of traded notional); higher tier ⇒ strictly lower equity, and
-    the per-bar return gap between tiers is exactly turnover × Δrate
+    high 0.5% of traded notional, both legs included); ``turnover`` is
+    one-sided, so the charge per unit is half the tier and a full round
+    trip (one buy + one sell) pays the tier exactly once. Higher tier ⇒
+    strictly lower equity, and the per-bar return gap between tiers is
+    exactly turnover × Δrate / 2
   - leaving the new parameters at their defaults reproduces the legacy
     fee_bps/slippage_bps behaviour bit-for-bit
   - cancel_fee_per_order converts to bps as fee / avg_order_notional × 1e4
@@ -40,16 +43,39 @@ def test_cost_tiers_ordering_and_exact_magnitude():
     bt = {t: run_long_only(close, signal, cost_tier=t) for t in COST_TIERS}
     # direction: higher two-sided rate ⇒ lower equity
     assert bt["low"].equity.iloc[-1] > bt["mid"].equity.iloc[-1] > bt["high"].equity.iloc[-1]
-    # magnitude: per-bar return gap equals turnover × Δrate exactly
+    # magnitude: per-bar charge is half the declared two-sided rate per unit
+    # of one-sided turnover, so the gap between tiers is turnover × Δrate / 2
     turnover = _turnover(close, signal)
     gap = bt["low"].returns - bt["high"].returns
     pd.testing.assert_series_equal(
-        gap, (turnover * (0.005 - 0.002)).rename("returns"), atol=1e-15
+        gap, (turnover * (0.005 - 0.002) / 2.0).rename("returns"), atol=1e-15
     )
-    # stats report the effective basis
+    # stats report the effective per-side basis and the declared round-trip rate
     assert bt["high"].stats["cost_tier"] == "high"
     assert bt["high"].stats["two_sided_bps"] == pytest.approx(50.0)
-    assert bt["high"].stats["cost_bps_effective"] == pytest.approx(50.0)
+    assert bt["high"].stats["cost_bps_effective"] == pytest.approx(25.0)
+
+
+def test_round_trip_pays_tier_exactly_once():
+    """One buy + one sell must pay the two-sided tier rate exactly once.
+
+    Regression: the two-sided rate used to be charged in full on every
+    one-sided turnover unit, doubling realized friction (a "low" tier
+    round trip cost 0.4% instead of the declared 0.2%).
+    """
+    idx = pd.date_range("2022-01-03", periods=5, freq="B")
+    close = pd.Series([100.0, 100.0, 100.0, 100.0, 100.0], index=idx)
+    # enter after bar 1, exit after bar 3 → turnover = 1 + 1 = 2, no pnl
+    signal = pd.Series([0.0, 1.0, 1.0, 0.0, 0.0], index=idx)
+    bt = run_long_only(close, signal, cost_tier="low", initial_capital=1.0)
+    assert bt.returns.sum() == pytest.approx(-COST_TIERS["low"])
+    assert bt.equity.iloc[-1] == pytest.approx((1.0 - COST_TIERS["low"] / 2.0) ** 2)
+    # same contract for the explicit bps spelling
+    bt_bps = run_long_only(close, signal, two_sided_bps=20.0, initial_capital=1.0)
+    assert bt_bps.equity.iloc[-1] == pytest.approx((1.0 - 0.001) ** 2)
+    # legacy per-side fees stay per-side: 5 bps × 2 turnover units
+    bt_legacy = run_long_only(close, signal, fee_bps=5.0, initial_capital=1.0)
+    assert bt_legacy.returns.sum() == pytest.approx(-2 * 5e-4)
 
 
 def test_default_parameters_match_legacy_behaviour():
@@ -71,7 +97,10 @@ def test_two_sided_bps_equivalent_to_named_tier():
     bt_bps = run_long_only(close, signal, two_sided_bps=20.0)
     bt_tier = run_long_only(close, signal, cost_tier="low")
     pd.testing.assert_series_equal(bt_bps.equity, bt_tier.equity)
-    assert bt_bps.stats["cost_bps_effective"] == pytest.approx(20.0)
+    assert bt_bps.stats["cost_bps_effective"] == pytest.approx(10.0)
+    assert bt_bps.stats["two_sided_bps"] == pytest.approx(20.0)
+    # legacy default path reports no two-sided rate
+    assert run_long_only(close, signal).stats["two_sided_bps"] is None
 
 
 def test_cancel_fee_lowers_equity_and_converts_to_bps():

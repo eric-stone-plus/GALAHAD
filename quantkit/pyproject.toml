@@ -9,7 +9,23 @@ description = "Shared quantitative-research toolkit (GALAHAD)"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
-# Runtime deps live in requirements.txt (managed with the shared venv).
+# Core runtime deps imported unconditionally by the package. The full
+# research stack (data providers, jupyter, quantstats, ...) stays in
+# requirements.txt; heavy optional engines are extras below.
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+# vectorbt is fair-code (Apache-2.0 + Commons Clause): internal research
+# only, never resold as a standalone product. Pinned to 1.0.0 — the
+# 1.1.0 line has a numba JIT regression ("non-precise type array(pyobject)")
+# in from_signals under the pinned numba/numpy pair (see requirements.txt).
+sweep = ["vectorbt==1.0.0"]
+ml = ["lightgbm"]
 
 [tool.setuptools.packages.find]
 where = ["."]

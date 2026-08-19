@@ -102,7 +102,9 @@ def run_long_only(
         traded notional, both legs included. Overrides ``fee_bps`` +
         ``slippage_bps`` when set; mutually exclusive with
         ``two_sided_bps``. Default None keeps the legacy behaviour
-        bit-identical.
+        bit-identical. ``turnover`` is one-sided traded notional per bar
+        (a full round trip sums to 2), so the tier rate is charged as
+        half per unit — one buy + one sell pays the tier exactly once.
     two_sided_bps :
         Explicit two-sided all-in rate in bps (20.0 = 0.2%). Same override
         semantics as ``cost_tier``; takes precedence over it.
@@ -120,6 +122,7 @@ def run_long_only(
     """
     if cost_tier is not None and two_sided_bps is not None:
         raise ValueError("cost_tier and two_sided_bps are mutually exclusive")
+    two_sided = cost_tier is not None or two_sided_bps is not None
     if cost_tier is not None:
         if cost_tier not in COST_TIERS:
             raise ValueError(f"unknown cost_tier: {cost_tier!r} (use one of {sorted(COST_TIERS)})")
@@ -144,7 +147,13 @@ def run_long_only(
     pos = pos_target.shift(1).fillna(0.0)
     ret = px.pct_change().fillna(0.0)
     turnover = pos.diff().abs().fillna(pos.abs())
-    cost = turnover * ((notional_bps + cancel_bps) / 10_000.0)
+    # COST_TIERS / two_sided_bps declare a round-trip (both legs) rate while
+    # ``turnover`` is one-sided traded notional, so charge half the declared
+    # rate per unit: one buy + one sell pays the tier exactly once (same
+    # convention as quant-desk per-side fee = tier / 2). The legacy
+    # fee_bps/slippage_bps path stays per-side as before.
+    per_side_bps = notional_bps / 2.0 if two_sided else notional_bps
+    cost = turnover * ((per_side_bps + cancel_bps) / 10_000.0)
     strat_ret = pos * ret - cost
     equity = (1.0 + strat_ret).cumprod() * initial_capital
 
@@ -163,10 +172,12 @@ def run_long_only(
         "win_rate": win_rate,
         "final_equity": float(equity.iloc[-1]) if len(equity) else initial_capital,
         "fee_bps": fee_bps,
-        # effective cost actually charged per traded notional (bps)
-        "cost_bps_effective": notional_bps + cancel_bps,
+        # effective cost actually charged per unit of (one-sided) traded
+        # notional in bps; on the two-sided paths this is half the declared
+        # round-trip rate plus the per-order cancel fee
+        "cost_bps_effective": per_side_bps + cancel_bps,
         "cost_tier": cost_tier,
-        "two_sided_bps": notional_bps,
+        "two_sided_bps": notional_bps if two_sided else None,
         "cancel_fee_bps": cancel_bps,
     }
     return BacktestResult(

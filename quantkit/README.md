@@ -38,8 +38,13 @@ costs per bar.
 ## Quick start
 
 ```bash
-quant-python -c "import quantkit; print(quantkit.__version__)"
-quant-python -m pytest tests/ -q
+python -m pip install -e .          # core runtime deps
+python -c "import quantkit; print(quantkit.__version__)"
+python -m pytest tests/ -q
+
+# full research environment (data providers, vectorbt sweeps, ...)
+python -m pip install -r requirements.txt
+python -m pip install -e '.[sweep,ml]'
 ```
 
 ## Key features
@@ -71,8 +76,8 @@ score = keyword_sentiment("bullish rise exceeds expectations")
 ## Testing
 
 ```bash
-quant-python -m pytest tests/ --durations=10 -q
-# 86 tests, ~42s
+python -m pytest tests/ --durations=10 -q
+# 189 tests, ~8 min (2 skipped without lightgbm)
 ```
 
 ## Version

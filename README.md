@@ -35,7 +35,7 @@ cd researchkit
 uv run --with 'pytest>=8.3,<10' python -m pytest -q
 cd ..
 
-# toolkit (Python ≥3.12)
+# toolkit (Python ≥3.11; full research env: quantkit/requirements.txt)
 pip install -e ./quantkit
 python -m pytest quantkit/tests -q
 

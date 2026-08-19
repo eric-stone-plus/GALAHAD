@@ -433,10 +433,14 @@ def style_factors(
     market_cap: pd.Series | None = None,
     industry: pd.Series | None = None,
 ) -> pd.DataFrame:
-    """Compute cross-sectional style factors from OHLCV.
+    """Compute style factors from a single asset's OHLCV history.
 
     Returns a DataFrame with one column per factor, indexed same as ohlcv.
-    Factors are cross-sectionally z-scored (per date).
+    Each factor is z-scored against its own trailing history (rolling
+    60-bar time-series z-score, NOT a per-date cross-sectional z-score);
+    values are therefore comparable across time for this asset, not
+    across assets — cross-sectional standardization for a panel happens
+    downstream (e.g. ``preprocess_cross_section``).
 
     Factors produced:
     - value: 1/PE proxy via inverse of trailing 60d return (cheaper = higher)
@@ -479,7 +483,7 @@ def style_factors(
         (close * volume).rolling(20, min_periods=10).mean().clip(lower=1)
     )
 
-    # Cross-sectional z-score per date
+    # Rolling time-series z-score per factor (trailing 60 bars)
     for col in factors.columns:
         factors[col] = zscore(factors[col], window=60)
 
@@ -526,7 +530,7 @@ def gp_mine_factors(
     except ImportError:
         raise ImportError(
             "gplearn is required for GP factor mining. "
-            "Install with: uv pip install gplearn --python ~/.local/bin/quant-python"
+            "Install with: pip install gplearn"
         )
 
     aligned = features.dropna().index.intersection(labels.dropna().index)

@@ -5,7 +5,7 @@ Fetches real A-share data via akshare, computes style factors, runs
 index-enhanced optimizer, applies conformal weight policy, and reports
 performance metrics.
 
-Usage: quant-python scripts/ashare_backtest.py
+Usage: python scripts/ashare_backtest.py
 """
 
 from __future__ import annotations

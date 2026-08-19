@@ -10,7 +10,7 @@ Usage:
   quant-python scripts/auto_cycle.py --dry-run          # perception only, no paper
 
 Exit codes:
-  0  success
+  0  success (including a --dry-run whose perception succeeded)
   1  halted (HALT file present)
   2  fetch failed (no prices)
   3  internal error
@@ -51,9 +51,8 @@ def load_config(path: Path | None = None) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def check_halt(state_dir: Path) -> tuple[bool, str]:
-    """Check HALT file. Returns (halted, reason)."""
-    halt_path = state_dir / "HALT"
+def check_halt(halt_path: Path) -> tuple[bool, str]:
+    """Check the exact HALT file path. Returns (halted, reason)."""
     if halt_path.is_file():
         reason = halt_path.read_text(encoding="utf-8", errors="replace").strip()
         return True, reason or "HALT file present"
@@ -260,9 +259,9 @@ def main(argv: list[str] | None = None) -> int:
     state_dir = Path(args.state_dir) if args.state_dir else ROOT / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
 
-    # HALT check
+    # HALT check: honour the exact --halt-file path (default: state/HALT)
     halt_path = Path(args.halt_file) if args.halt_file else state_dir / "HALT"
-    halted, halt_reason = check_halt(state_dir if args.halt_file is None else halt_path.parent)
+    halted, halt_reason = check_halt(halt_path)
     if halted:
         msg = {"ts": utc_now(), "halted": True, "halt_reason": halt_reason}
         if args.json:
@@ -298,6 +297,10 @@ def main(argv: list[str] | None = None) -> int:
     if result.get("halted"):
         return 1
     if not result.get("paper_runs"):
+        # --dry-run completes without paper runs by design; that is success
+        # (exit 0), not a fetch failure — unless perception actually failed
+        if args.dry_run and result["perception"]["status"] != "fetch_failed":
+            return 0
         return 2
     return 0
 

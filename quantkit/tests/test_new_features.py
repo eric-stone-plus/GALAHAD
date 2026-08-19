@@ -49,6 +49,68 @@ def test_conformal_weight_policy_preserves_shape():
     assert scaled.columns.tolist() == symbols
 
 
+def test_conformal_weight_policy_per_asset_states():
+    """Each asset's DtACI state must be independent of the other columns.
+
+    Regression: a single shared state was advanced once per (bar, asset)
+    pair, so an asset's scale trajectory depended on how many other
+    assets were in the panel and on their coverage errors. With per-asset
+    states, every column matches its single-asset run exactly.
+    """
+    from quantkit.portfolio import conformal_weight_policy
+
+    rng = np.random.default_rng(7)
+    dates = pd.date_range("2024-01-01", periods=120, freq="B")
+    rets = pd.DataFrame(
+        {
+            "wild": rng.normal(0, 0.05, 120),  # frequent interval misses
+            "calm": rng.normal(0, 0.002, 120),  # nearly always inside
+        },
+        index=dates,
+    )
+    tw = pd.DataFrame(0.5, index=dates, columns=list(rets.columns))
+    scaled = conformal_weight_policy(tw, rets, alpha=0.10)
+    for col in rets.columns:
+        solo = conformal_weight_policy(tw[[col]], rets[[col]], alpha=0.10)
+        pd.testing.assert_series_equal(scaled[col], solo[col])
+
+
+def test_conformal_weight_policy_uses_adaptive_threshold():
+    """Coverage errors must be judged against the adaptive alpha_t interval.
+
+    Regression: err was computed against the fixed nominal alpha_target
+    threshold, so a persistent miss could never be forgiven by the widened
+    interval and alpha decayed monotonically to its floor (scale strictly
+    non-decreasing). With the adaptive threshold, once alpha_t has widened
+    past the observation's z-score the next err is 0 and the scale falls.
+    """
+    from quantkit.portfolio import conformal_weight_policy
+
+    # deterministic returns: tiny alternating moves (sigma ≈ 0.001), then a
+    # sustained regime of moves ~3 sigma large but below the widened
+    # floor-alpha threshold (norm.ppf(1 - 1e-4/2) ≈ 3.89)
+    n_warm, n_shock = 40, 60
+    rets = np.concatenate(
+        [
+            0.001 * np.array([1.0, -1.0] * (n_warm // 2)),
+            0.0032 * np.array([1.0, -1.0] * (n_shock // 2)),
+        ]
+    )
+    dates = pd.date_range("2024-01-01", periods=n_warm + n_shock, freq="B")
+    panel = pd.DataFrame({"A": rets}, index=dates)
+    tw = pd.DataFrame(1.0, index=dates, columns=["A"])
+    # large halflife so the EWM sigma adapts slowly and z stays ~2.6–3.2
+    scaled = conformal_weight_policy(tw, panel, alpha=0.10, halflife=1000.0)
+    scale_path = scaled["A"].to_numpy()
+    # the early shock bars are misses (scale rises), but the widened
+    # interval must eventually cover the same z level: scale has to fall
+    # back at least once after its shock-regime peak
+    shock = scale_path[n_warm + 1 :]
+    peak = int(np.argmax(shock))
+    assert peak < len(shock) - 1, "scale never recovered after interval widened"
+    assert shock[peak + 1:].min() < shock[peak]
+
+
 # ---------------------------------------------------------------------------
 # style_factors
 # ---------------------------------------------------------------------------
@@ -71,7 +133,12 @@ def test_style_factors_returns_six_columns():
 
 
 def test_style_factors_zscored_roughly():
-    """After z-scoring, cross-sectional mean should be near 0."""
+    """Rolling time-series z-score: full-sample mean of each factor near 0.
+
+    The z-score is per-factor over its own trailing 60-bar history (not a
+    per-date cross-sectional z-score), so the full-sample mean of each
+    standardized column should stay close to zero.
+    """
     from quantkit.factors import style_factors
 
     rng = np.random.default_rng(88)
@@ -82,7 +149,8 @@ def test_style_factors_zscored_roughly():
     ohlcv = pd.DataFrame({"close": close, "volume": vol}, index=dates)
 
     factors = style_factors(ohlcv)
-    # After z-scoring, mean of each column should be near 0 (allow NaN warmup + drift)
+    # after rolling z-scoring, mean of each column should be near 0
+    # (allow NaN warmup + drift)
     for col in factors.columns:
         mean = factors[col].iloc[60:].mean()
         assert abs(mean) < 2.0, f"{col} mean={mean}"

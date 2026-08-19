@@ -254,8 +254,13 @@ def conformal_weight_policy(
     """Scale portfolio weights by conformal prediction confidence.
 
     Uses DtACI (dynamically-tuned ACI) to track per-asset prediction
-    intervals.  When the interval is wide (high uncertainty), the weight
-    is scaled down; when narrow (high confidence), weight stays at target.
+    intervals: each asset carries its own DtACI state (advanced once per
+    bar), and the coverage indicator compares each observation against the
+    interval formed with that asset's current adaptive miscoverage level
+    ``alpha_t`` — so persistent misses widen the interval (alpha_t falls)
+    and hits narrow it again.  When the interval is wide (high
+    uncertainty), the weight is scaled down; when narrow (high
+    confidence), weight stays at target.
 
     Parameters
     ----------
@@ -271,6 +276,8 @@ def conformal_weight_policy(
     -------
     Scaled weight panel, same shape as target_weights.
     """
+    from scipy.stats import norm
+
     from quantkit.conformal import DtACIState, dtaci_update
 
     aligned = target_weights.index.intersection(returns.index)
@@ -278,7 +285,16 @@ def conformal_weight_policy(
     ret = returns.loc[aligned].astype(float)
 
     scales = pd.DataFrame(1.0, index=aligned, columns=tw.columns)
-    state = DtACIState(alpha_target=alpha, eta=gamma * 10)
+    # One independent DtACI state per asset: a single shared state would be
+    # advanced N times per bar (alpha evolving N× too fast) with coverage
+    # errors from one asset polluting every other asset's interval.
+    states = {
+        col: DtACIState(alpha_target=alpha, eta=gamma * 10) for col in tw.columns
+    }
+    # current aggregated miscoverage per asset; each new observation is
+    # judged against the interval formed with this alpha_t (not the fixed
+    # nominal alpha_target), closing the online widen/narrow feedback loop
+    alpha_t: dict[str, float] = {col: alpha for col in tw.columns}
 
     # Rolling volatility for prediction interval estimation
     vol = ret.ewm(halflife=halflife, min_periods=5).std().shift(1).bfill().clip(lower=1e-8)
@@ -291,15 +307,15 @@ def conformal_weight_policy(
             sigma = vol.loc[prev_date, col] if prev_date in vol.index else 0.01
             # z-score: how many sigma away from zero
             z = abs(actual) / max(sigma, 1e-8)
-            # Coverage indicator: 0 if within interval, 1 if outside
-            # Interval width scales with alpha_t
-            from scipy.stats import norm
-            threshold = norm.ppf(1 - state.alpha_target / 2)
+            # Coverage indicator: 0 if within interval, 1 if outside.
+            # Interval width scales with the adaptive alpha_t: a miss pushes
+            # alpha_t down (wider interval), a hit pushes it back up.
+            threshold = norm.ppf(1 - alpha_t[col] / 2)
             err = 0 if z <= threshold else 1
-            alpha_t = dtaci_update(state, err)
+            alpha_t[col] = dtaci_update(states[col], err)
             # Lower alpha_t = better coverage = higher confidence
             # Map to [min_scale, max_scale]
-            conf = 1.0 - alpha_t
+            conf = 1.0 - alpha_t[col]
             scale = min_scale + (max_scale - min_scale) * max(0.0, min(1.0, conf))
             scales.loc[curr_date, col] = scale
 

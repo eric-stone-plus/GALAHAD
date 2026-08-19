@@ -6,4 +6,4 @@
 - Code changes require tests (`pytest` per component); keep the paper-first discipline — no live-order path enabled by default.
 - Secrets and environment specifics belong in env vars (`QUANT_DESK_PROXY`, API keys via `.env`, never committed).
 - Preserve contributor identity: agent-authored commits use the agent's GitHub-linked Git author identity rather than the human operator or only a co-author trailer; human-authored commits retain the human author.
-- MIT License.
+- Apache-2.0 License (see `LICENSE` and `NOTICE`).

@@ -1,6 +1,8 @@
-# Shared quant toolchain (Python 3.12). Install into quant/.venv only.
-#   quant-python -m pip install -r requirements.txt
-#   quant-python -m pip install -e .
+# Full quant research toolchain (Python ≥3.11). Core runtime deps are
+# declared in pyproject.toml (pip install -e . suffices for the library
+# and the test suite); this file adds the full research environment.
+#   python -m pip install -r requirements.txt
+#   python -m pip install -e .
 
 # --- vectorized parameter sweeps (optional; quantkit.sweep) ---
 # vectorbt is fair-code (Apache-2.0 + Commons Clause): internal research
@@ -54,7 +56,6 @@ ccxt
 quantstats
 pandas-ta
 backtrader
-# vectorbt  # optional; currently fails on some Intel Macs (llvmlite rebuild). Use quantkit.backtest instead.
 
 # --- ML ---
 lightgbm
