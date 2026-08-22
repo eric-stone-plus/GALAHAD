@@ -53,6 +53,16 @@ US equities run as a parallel track after P2: Alpaca paper → IBKR. A-share
 execution stays semi-automated (signal → human) unless a sanctioned channel
 becomes available.
 
+**Factor-library iteration (2026-08-22):** the L2 signal layer gains an exact
+pandas port of QLib's Alpha158 factor set (`quantkit.alpha158`; factor
+definitions attributed to microsoft/qlib, MIT-licensed) together with a
+per-factor evaluation table (`quantkit.factor_eval.factor_ic_table`: blockwise
+IC/RankIC mean, std, ICIR, observation count against forward returns). This
+supersedes the approximate 62-factor `ml_pipeline.Alpha158` for research
+screening; the port is lookahead-free by construction (every factor at row t
+uses only rows ≤ t) and covered by hand-computed and mutation-based
+no-lookahead tests.
+
 ## 3. Risk doctrine (precedes any strategy code)
 
 1. Every execution path defaults to OFF; enabling one is an explicit human act
