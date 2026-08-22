@@ -25,7 +25,7 @@ dependencies = [
 # 1.1.0 line has a numba JIT regression ("non-precise type array(pyobject)")
 # in from_signals under the pinned numba/numpy pair (see requirements.txt).
 sweep = ["vectorbt==1.0.0"]
-ml = ["lightgbm"]
+ml = ["lightgbm", "xgboost", "scikit-learn"]
 
 [tool.setuptools.packages.find]
 where = ["."]

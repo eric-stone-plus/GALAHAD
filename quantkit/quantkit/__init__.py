@@ -4,6 +4,7 @@ Modules:
   data        multi-market OHLCV (US / CN / HK / crypto) with local cache
   indicators  technical indicators
   factors     factor engineering + style factors + GP mining + simple ML ranking
+  ml_pipeline Alpha158 factors + multi-model training + rolling retrain manager
   selection   cross-sectional stock selection (universe → top-N)
   backtest    vectorized single-asset helpers
   portfolio   multi-asset weights + rebalance engine + conformal weight policy
