@@ -59,6 +59,20 @@ Design doctrine
   rejects them under hard caps *before* any fill.
 - **Validation before belief** — purged walk-forward is the final arbiter;
   CPCV/PBO/DSR are diagnostics, block bootstrap for uncertainty.
+- **Factors are ore, not ammunition** — candidate factor libraries are ported
+  from public references (e.g. QLib's Alpha158, MIT) and every candidate is
+  screened before it may influence a decision: formula-fidelity tests against
+  the reference definitions, no-lookahead property tests, IC/RankIC/ICIR
+  ranking on the desk's own universes, then purged walk-forward with
+  PSR/DSR/PBO. A candidate that fails any stage is discarded, not debated.
+- **Post-training rewards must be unfakeable** — model post-training is
+  rewarded only by deterministically verifiable signals: settlement-matched
+  calibration of pre-registered forecasts (frozen at issuance, timestamped,
+  settled against the realized target), penalties from the validation
+  machinery, and the paper ledger as the long-horizon evaluator. Backtest
+  return is never a reward — it teaches overfitting — and the adversarial
+  review stays outside the reward loop: an auditor inside the objective gets
+  optimized, not consulted.
 - **Paper is default** — no live capital path ships enabled.
 - **Skills own procedure, Python owns arithmetic** — MCP is an optional,
   replaceable boundary for external data, never the source of finance doctrine.
