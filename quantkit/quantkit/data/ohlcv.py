@@ -235,6 +235,43 @@ def _fetch_baostock_cn(
     return normalize_ohlcv(raw)
 
 
+def _is_baostock_unavailable(exc: BaseException) -> bool:
+    """True when BaoStock cannot serve this host (blacklist, login, socket)."""
+    text = str(exc)
+    return any(
+        marker in text
+        for marker in (
+            "login failed",
+            "10001011",
+            "10001001",
+            "10002001",
+            "10002002",
+            "10002003",
+            "10002007",
+            "黑名单",
+        )
+    )
+
+
+def _yahoo_cn_symbol(symbol: str) -> str:
+    """Map a mainland ticker onto Yahoo's .SS/.SZ/.BJ suffix."""
+    upper = symbol.strip().upper()
+    if upper.endswith(".SH"):
+        return upper[:-3] + ".SS"
+    if upper.endswith((".SS", ".SZ", ".BJ")):
+        return upper
+    if upper.startswith(("SH.", "SZ.", "BJ.")):
+        exch, code = upper.split(".", 1)
+        suffix = {"SH": "SS", "SZ": "SZ", "BJ": "BJ"}[exch]
+        return f"{code}.{suffix}"
+    code = upper.split(".", 1)[0]
+    if code.startswith(("6", "9")):
+        return f"{code}.SS"
+    if code.startswith(("4", "8")):
+        return f"{code}.BJ"
+    return f"{code}.SZ"
+
+
 def _fetch_akshare_hk(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
     import akshare as ak
 
@@ -345,7 +382,18 @@ def fetch_ohlcv(
     elif prov == "baostock":
         if market not in ("auto", "cn"):
             raise ValueError("BaoStock provider supports mainland-China symbols only")
-        df = _fetch_baostock_cn(symbol, start, end, interval)
+        try:
+            df = _fetch_baostock_cn(symbol, start, end, interval)
+        except RuntimeError as exc:
+            if not _is_baostock_unavailable(exc):
+                raise
+            # Direct BaoStock is TCP :10030; HTTP_PROXY is ignored and the
+            # SOCKS path errors with 10002007. Fall through to Eastmoney
+            # (akshare) then Yahoo's .SS/.SZ feed.
+            try:
+                df = _fetch_akshare_cn(symbol, start, end)
+            except Exception:
+                df = _fetch_yahoo(_yahoo_cn_symbol(symbol), start, end, interval)
     elif prov == "akshare":
         m = market
         if m == "auto":

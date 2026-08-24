@@ -151,6 +151,36 @@ def test_baostock_normalizes_compact_dates_and_rejects_reverse_range(monkeypatch
         ohlcv._fetch_baostock_cn("600519", "2026-08-15", "2026-08-14", "1d")
 
 
+def test_baostock_login_failure_falls_back_to_akshare(monkeypatch):
+    monkeypatch.setattr(
+        ohlcv,
+        "_fetch_baostock_cn",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("BaoStock login failed: 10001011")
+        ),
+    )
+    seen = []
+    expected = pd.DataFrame(
+        {"open": [1], "high": [1], "low": [1], "close": [1], "volume": [1]},
+        index=pd.DatetimeIndex(["2026-08-14"], name="date"),
+    )
+
+    def fake_akshare(symbol, start, end):
+        seen.append((symbol, start, end))
+        return expected
+
+    monkeypatch.setattr(ohlcv, "_fetch_akshare_cn", fake_akshare)
+    frame = ohlcv.fetch_ohlcv("600519.SS", start="2026-08-14", end="2026-08-14", use_cache=False)
+    assert seen == [("600519.SS", "2026-08-14", "2026-08-14")]
+    pd.testing.assert_frame_equal(frame, expected)
+
+
+def test_yahoo_cn_symbol_mapping():
+    assert ohlcv._yahoo_cn_symbol("600519") == "600519.SS"
+    assert ohlcv._yahoo_cn_symbol("000001.SZ") == "000001.SZ"
+    assert ohlcv._yahoo_cn_symbol("sh.600519") == "600519.SS"
+
+
 def test_fetch_routes_auto_cn_to_baostock_and_uses_source_specific_cache(monkeypatch, tmp_path):
     seen = []
     expected = pd.DataFrame(
