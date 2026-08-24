@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from types import SimpleNamespace
 
@@ -30,9 +31,9 @@ class _BaoResult:
 
 
 def test_auto_provider_routing():
-    assert ohlcv._resolve_provider("600519", "cn", "auto") == "baostock"
-    assert ohlcv._resolve_provider("600519", "auto", "auto") == "baostock"
-    assert ohlcv._resolve_provider("600519.SS", "auto", "auto") == "baostock"
+    assert ohlcv._resolve_provider("600519", "cn", "auto") == "akshare"
+    assert ohlcv._resolve_provider("600519", "auto", "auto") == "akshare"
+    assert ohlcv._resolve_provider("600519.SS", "auto", "auto") == "akshare"
     assert ohlcv._resolve_provider("0700.HK", "hk", "auto") == "yahoo"
     assert ohlcv._resolve_provider("0700.HK", "auto", "auto") == "yahoo"
     assert ohlcv._resolve_provider("00700", "auto", "auto") == "yahoo"
@@ -181,18 +182,18 @@ def test_yahoo_cn_symbol_mapping():
     assert ohlcv._yahoo_cn_symbol("sh.600519") == "600519.SS"
 
 
-def test_fetch_routes_auto_cn_to_baostock_and_uses_source_specific_cache(monkeypatch, tmp_path):
+def test_fetch_routes_auto_cn_to_akshare_and_uses_source_specific_cache(monkeypatch, tmp_path):
     seen = []
     expected = pd.DataFrame(
         {"close": [1341.99]},
         index=pd.DatetimeIndex(["2026-08-14"], name="date"),
     )
 
-    def fake_fetch(symbol, start, end, interval):
-        seen.append((symbol, start, end, interval))
+    def fake_fetch(symbol, start, end):
+        seen.append((symbol, start, end))
         return expected
 
-    monkeypatch.setattr(ohlcv, "_fetch_baostock_cn", fake_fetch)
+    monkeypatch.setattr(ohlcv, "_fetch_akshare_cn", fake_fetch)
     result = ohlcv.fetch_ohlcv(
         "600519.SS",
         start="2026-08-14",
@@ -200,9 +201,39 @@ def test_fetch_routes_auto_cn_to_baostock_and_uses_source_specific_cache(monkeyp
         data_dir=tmp_path,
     )
 
-    assert seen == [("600519.SS", "2026-08-14", "2026-08-14", "1d")]
+    assert seen == [("600519.SS", "2026-08-14", "2026-08-14")]
     pd.testing.assert_frame_equal(result, expected)
-    assert (tmp_path / "cache" / "baostock_auto_600519.SS_1d_2026-08-14_2026-08-14.parquet").is_file()
+    assert (tmp_path / "cache" / "akshare_auto_600519.SS_1d_2026-08-14_2026-08-14.parquet").is_file()
+
+
+def test_tencent_cn_parses_qfqday(monkeypatch):
+    payload = {
+        "code": 0,
+        "data": {
+            "sh600519": {
+                "qfqday": [
+                    ["2026-08-24", "1271.01", "1304.66", "1313.80", "1270.33", "48440"],
+                ]
+            }
+        },
+    }
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps(payload).encode()
+
+    import urllib.request as ureq
+
+    monkeypatch.setattr(ureq, "urlopen", lambda *a, **k: _Resp())
+    frame = ohlcv._fetch_tencent_cn("600519.SS", "2026-08-24", "2026-08-24")
+    assert float(frame.loc[pd.Timestamp("2026-08-24"), "close"]) == pytest.approx(1304.66)
+    assert float(frame.loc[pd.Timestamp("2026-08-24"), "open"]) == pytest.approx(1271.01)
 
 
 def test_fetch_normalizes_bare_hk_code_for_yahoo(monkeypatch, tmp_path):

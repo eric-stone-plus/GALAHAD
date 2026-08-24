@@ -3,8 +3,8 @@
 Providers
 ---------
 - yahoo   : yfinance  (US equities/indexes, many HK via ``XXXX.HK``)
-- baostock: A-share daily bars (default for mainland China)
-- akshare : A-share daily / HK via akshare (network dependent fallback)
+- baostock: A-share daily bars (optional; this host is blacklisted)
+- akshare : A-share daily via Tencent fqkline, then Sina / Eastmoney / Yahoo
 - ccxt    : crypto OHLCV (default exchange: binance)
 
 All loaders return a normalized DataFrame::
@@ -106,7 +106,9 @@ def _resolve_provider(symbol: str, market: Market, provider: Provider) -> Provid
         or upper.endswith((".SH", ".SS", ".SZ"))
         or (upper.isdigit() and len(upper) == 6)
     ):
-        return "baostock"
+        # BaoStock TCP :10030 is blacklisted on this host. Prefer public
+        # quote pages (Tencent / Sina / Eastmoney) via the akshare path.
+        return "akshare"
     # US + HK yahoo tickers like 0700.HK
     return "yahoo"
 
@@ -131,21 +133,53 @@ def _fetch_yahoo(symbol: str, start: str | None, end: str | None, interval: str)
     return normalize_ohlcv(raw)
 
 
-def _fetch_akshare_cn(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
-    import akshare as ak
-
+def _a_share_code(symbol: str) -> str:
     code = symbol.strip().lower()
     for prefix in ("sh.", "sz.", "bj."):
         if code.startswith(prefix):
-            code = code[len(prefix) :]
-            break
+            return code[len(prefix) :]
     for suffix in (".sh", ".ss", ".sz", ".bj"):
         if code.endswith(suffix):
-            code = code[: -len(suffix)]
-            break
+            return code[: -len(suffix)]
+    return code
+
+
+def _tencent_cn_symbol(symbol: str) -> str:
+    yahoo = _yahoo_cn_symbol(symbol)
+    code, suffix = yahoo.rsplit(".", 1)
+    prefix = {"SS": "sh", "SZ": "sz", "BJ": "bj"}[suffix]
+    return f"{prefix}{code.lower()}"
+
+
+def _fetch_tencent_cn(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
+    """Forward-adjusted daily bars from Tencent fqkline (no login, HTTP)."""
+    import json
+    import urllib.request
+
+    code = _tencent_cn_symbol(symbol)
+    start_s = pd.Timestamp(start).date().isoformat() if start else ""
+    end_s = pd.Timestamp(end).date().isoformat() if end else ""
+    param = f"{code},day,{start_s},{end_s},800,qfq"
+    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=" + param
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        payload = json.loads(resp.read().decode())
+    node = ((payload.get("data") or {}).get(code)) or {}
+    rows = node.get("qfqday") or node.get("day") or []
+    if not rows:
+        raise RuntimeError(f"Tencent A-share empty for {code}")
+    raw = pd.DataFrame(rows)
+    raw = raw.iloc[:, :6]
+    raw.columns = ["date", "open", "close", "high", "low", "volume"]
+    return normalize_ohlcv(raw)
+
+
+def _fetch_eastmoney_cn(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
+    import akshare as ak
+
+    code = _a_share_code(symbol)
     start_s = (start or "20180101").replace("-", "")
     end_s = (end or datetime.now().strftime("%Y-%m-%d")).replace("-", "")
-    # Eastmoney daily
     raw = ak.stock_zh_a_hist(
         symbol=code,
         period="daily",
@@ -154,6 +188,41 @@ def _fetch_akshare_cn(symbol: str, start: str | None, end: str | None) -> pd.Dat
         adjust="qfq",
     )
     return normalize_ohlcv(raw)
+
+
+def _fetch_sina_cn(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
+    import akshare as ak
+
+    tencent = _tencent_cn_symbol(symbol)
+    start_s = (start or "20180101").replace("-", "")
+    end_s = (end or datetime.now().strftime("%Y-%m-%d")).replace("-", "")
+    raw = ak.stock_zh_a_daily(
+        symbol=tencent,
+        start_date=start_s,
+        end_date=end_s,
+        adjust="qfq",
+    )
+    return normalize_ohlcv(raw)
+
+
+def _fetch_akshare_cn(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
+    """Stable A-share daily chain: Tencent → Sina → Eastmoney → Yahoo."""
+    errors: list[str] = []
+    for loader in (
+        lambda: _fetch_tencent_cn(symbol, start, end),
+        lambda: _fetch_sina_cn(symbol, start, end),
+        lambda: _fetch_eastmoney_cn(symbol, start, end),
+        lambda: _fetch_yahoo(_yahoo_cn_symbol(symbol), start, end, "1d"),
+    ):
+        try:
+            frame = loader()
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+            continue
+        if frame is not None and not frame.empty:
+            return frame
+        errors.append("empty frame")
+    raise RuntimeError("A-share fetch failed: " + " | ".join(errors[-4:]))
 
 
 def _baostock_symbol(symbol: str) -> str:
