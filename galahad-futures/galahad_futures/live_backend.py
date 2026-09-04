@@ -412,6 +412,7 @@ def _run_node(
     from nautilus_trader.adapters.binance.config import (
         BinanceDataClientConfig,
         BinanceExecClientConfig,
+        BinanceInstrumentProviderConfig,
     )
     from nautilus_trader.adapters.binance.factories import (
         BinanceLiveDataClientFactory,
@@ -650,6 +651,13 @@ def _run_node(
             self.account_curve.append({"ts": ts_iso, "equity": pre_eq})
             session.update_equity(eq if eq is not None else pre_eq, ts=ts_iso)
 
+    url_overrides = testnet_url_overrides(cfg)
+    # Load exactly the session instrument into the cache (the provider's
+    # default loads nothing, and every order gates on instrument presence).
+    instrument_provider = BinanceInstrumentProviderConfig(
+        load_all=False,
+        load_ids=frozenset({instrument_id}),
+    )
     node_config = TradingNodeConfig(
         environment=Environment.SANDBOX,
         trader_id="GALAHAD-TESTNET-001",
@@ -660,7 +668,8 @@ def _run_node(
                 api_secret=api_secret,
                 account_type=BinanceAccountType.USDT_FUTURES,
                 environment=BinanceEnvironment.TESTNET,
-                **testnet_url_overrides(cfg),
+                instrument_provider=instrument_provider,
+                **url_overrides,
             ),
         },
         exec_clients={
@@ -669,11 +678,12 @@ def _run_node(
                 api_secret=api_secret,
                 account_type=BinanceAccountType.USDT_FUTURES,
                 environment=BinanceEnvironment.TESTNET,
+                instrument_provider=instrument_provider,
                 futures_leverages={BinanceSymbol(symbol): max(1, int(round(default_leverage)))},
                 # Netting (venue one-way mode): order events carry no hedge
                 # position ids.
                 use_position_ids=False,
-                **testnet_url_overrides(cfg),
+                **url_overrides,
             ),
         },
         timeout_connection=30.0,
