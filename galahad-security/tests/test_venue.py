@@ -166,6 +166,24 @@ def test_get_daily_bars_anchors_explicit_start_window():
     assert out["AAPL"].iloc[-1]["close"] == 2.0
 
 
+def test_get_daily_bars_fetches_one_symbol_per_request():
+    # Multi-symbol bar requests silently drop symbols on some plans; the
+    # client must issue one request per symbol.
+    client = venue_alpaca._AlpacaPaperClient("k", "s")
+    urls: list[str] = []
+
+    def fake_request(method: str, url: str):
+        urls.append(url)
+        sym = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["symbols"][0]
+        return {"bars": {sym: [{"t": "2026-09-04T04:00:00Z", "o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "v": 100.0}]}}
+
+    client._request = fake_request
+    out = client.get_daily_bars(["AAPL", "MSFT"], limit=30)
+    assert len(urls) == 2
+    assert [urllib.parse.parse_qs(urllib.parse.urlparse(u).query)["symbols"][0] for u in urls] == ["AAPL", "MSFT"]
+    assert set(out) == {"AAPL", "MSFT"}
+
+
 def test_cli_venue_without_credentials_fails_clean():
     env = {k: v for k, v in os.environ.items() if not k.startswith("ALPACA_")}
     for script in ("run_paper.py", "run_venue.py"):

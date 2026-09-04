@@ -226,23 +226,25 @@ class _AlpacaPaperClient:
         # The bars endpoint without ``start`` returns only the current-day bar,
         # so anchor an explicit window wide enough to hold ``limit`` trading
         # days (~252/yr, 1.5x safety) and let ``limit`` cap the tail.
+        # Multi-symbol requests silently drop symbols on some plans, so fetch
+        # one symbol per request.
         window_days = int(limit * 365 / 252 * 1.5) + 10
         start = (date.today() - timedelta(days=window_days)).isoformat()
-        query = urllib.parse.urlencode(
-            {
-                "symbols": ",".join(symbols),
-                "timeframe": "1Day",
-                "limit": int(limit),
-                "start": start,
-                "feed": "iex",
-                # v1 models no corporate actions — raw prices, documented.
-                "adjustment": "raw",
-            }
-        )
-        payload = self._request("GET", f"{self.data_url}/v2/stocks/bars?{query}")
-        bars = payload.get("bars") or {}
         out: dict[str, pd.DataFrame] = {}
         for symbol in symbols:
+            query = urllib.parse.urlencode(
+                {
+                    "symbols": symbol,
+                    "timeframe": "1Day",
+                    "limit": int(limit),
+                    "start": start,
+                    "feed": "iex",
+                    # v1 models no corporate actions — raw prices, documented.
+                    "adjustment": "raw",
+                }
+            )
+            payload = self._request("GET", f"{self.data_url}/v2/stocks/bars?{query}")
+            bars = payload.get("bars") or {}
             rows = bars.get(symbol) or []
             if not rows:
                 raise RuntimeError(
