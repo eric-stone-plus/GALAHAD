@@ -20,6 +20,11 @@ is the only allowed action — never a frozen position) and new risk stays
 blocked until equity recovers past floor + ``daily_loss_hysteresis``.
 The hysteresis band prevents order flapping when equity hovers at the
 floor, which matters for automated execution.
+
+Graduated de-risking ladder (optional, default OFF): ``derisk_ladder``
+tiers scale targets down as session drawdown deepens — strictly earlier
+and softer than the force-flat gates, never a weakening of them.
+Malformed ladders are a hard config error at gate construction.
 """
 
 from __future__ import annotations
@@ -43,6 +48,59 @@ class RiskConfig:
     enable_live: bool = False  # inert: mode=live is blocked unconditionally
     enable_testnet: bool = False  # testnet passes only when True + kill_switch off
     mode: str = "paper"  # paper | testnet | live
+    # Graduated de-risking: [{drawdown: frac, leverage_multiplier: 0..1}, ...]
+    # ascending in drawdown. Empty = OFF. Normalized by RiskGate to a tuple
+    # of (drawdown, multiplier) pairs; malformed config raises ValueError.
+    derisk_ladder: Any = None
+
+
+def validate_derisk_ladder(ladder: Any) -> tuple[tuple[float, float], ...]:
+    """Fail-closed ladder config validation; returns normalized tier pairs.
+
+    Hard ``ValueError`` on: wrong container type, missing/non-numeric keys,
+    drawdowns outside (0, 1] or non-ascending, multipliers outside [0, 1].
+    """
+    if ladder is None or ladder == () or ladder == []:
+        return ()
+    if not isinstance(ladder, (list, tuple)):
+        raise ValueError(
+            f"risk.derisk_ladder must be a list of tiers, got {type(ladder).__name__}"
+        )
+    out: list[tuple[float, float]] = []
+    prev_dd = 0.0
+    for i, tier in enumerate(ladder):
+        if isinstance(tier, dict):
+            raw_dd, raw_mult = tier.get("drawdown"), tier.get("leverage_multiplier")
+        elif isinstance(tier, (list, tuple)) and len(tier) == 2:
+            raw_dd, raw_mult = tier  # normalized pair (idempotent re-validation)
+        else:
+            raise ValueError(
+                f"risk.derisk_ladder tier {i} malformed (need "
+                f"{{drawdown, leverage_multiplier}}): {tier!r}"
+            )
+        try:
+            dd, mult = float(raw_dd), float(raw_mult)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"risk.derisk_ladder tier {i} has non-numeric drawdown/"
+                f"leverage_multiplier: {tier!r}"
+            ) from exc
+        if not (0.0 < dd <= 1.0):
+            raise ValueError(
+                f"risk.derisk_ladder tier {i}: drawdown {dd} outside (0, 1]"
+            )
+        if not (0.0 <= mult <= 1.0):
+            raise ValueError(
+                f"risk.derisk_ladder tier {i}: leverage_multiplier {mult} outside [0, 1]"
+            )
+        if dd <= prev_dd + 1e-12:
+            raise ValueError(
+                f"risk.derisk_ladder must be strictly ascending in drawdown "
+                f"(tier {i}: {dd} after {prev_dd})"
+            )
+        prev_dd = dd
+        out.append((dd, mult))
+    return tuple(out)
 
 
 @dataclass
@@ -51,6 +109,8 @@ class RiskDecision:
     target_signed_leverage: float
     reason: str = ""
     clipped: bool = False
+    # Active de-risk ladder multiplier applied to this decision (1.0 = none).
+    derisk_multiplier: float = 1.0
 
 
 @dataclass
@@ -70,6 +130,9 @@ class RiskGate:
     def __post_init__(self) -> None:
         if self.peak_equity <= 0:
             self.peak_equity = float(self.day_start_equity)
+        # Fail closed at construction: malformed ladder config raises here,
+        # identically for every engine (all build gates via SessionRisk).
+        self.config.derisk_ladder = validate_derisk_ladder(self.config.derisk_ladder)
 
     # --- state helpers ---------------------------------------------------
 
@@ -170,6 +233,41 @@ class RiskGate:
             return 0.0
         return max(0.0, (self.peak_equity - float(equity)) / self.peak_equity)
 
+    # --- graduated de-risking ladder --------------------------------------
+
+    def derisk_multiplier(self, equity: float) -> float:
+        """Active ladder multiplier at this equity (1.0 = ladder off/inactive).
+
+        The deepest breached tier wins; a tier is breached at exactly its
+        threshold. The ladder only ever scales targets down — it never
+        weakens the force-flat gates, which fire at their own thresholds.
+        """
+        ladder = self.config.derisk_ladder
+        if not ladder:
+            return 1.0
+        dd = self.current_drawdown(equity)
+        mult = 1.0
+        for tier_dd, tier_mult in ladder:
+            if dd + 1e-12 >= tier_dd:
+                mult = tier_mult
+            else:
+                break
+        return mult
+
+    def derisk_summary(self) -> dict[str, Any]:
+        """Session-level ladder evidence for the summary ``derisk`` block."""
+        ladder = self.config.derisk_ladder
+        if not ladder:
+            return {"ladder_enabled": False, "tiers_triggered": 0, "min_multiplier": 1.0}
+        triggered = [
+            mult for dd, mult in ladder if self.max_drawdown_seen + 1e-12 >= dd
+        ]
+        return {
+            "ladder_enabled": True,
+            "tiers_triggered": len(triggered),
+            "min_multiplier": min(triggered) if triggered else 1.0,
+        }
+
     # --- per-decision evaluation -----------------------------------------
 
     def filter_target(
@@ -186,7 +284,8 @@ class RiskGate:
         """Clip or reject a strategy target before any fill.
 
         Ordering: live gate → invalid inputs → terminal force-flats
-        (invalidation, daily-loss halt) → sizing caps.
+        (invalidation, daily-loss halt) → sizing caps → de-risk ladder
+        (strictly softer: only scales down).
         """
         if self.live_blocked():
             d = RiskDecision(False, 0.0, reason="live_blocked_kill_switch_or_disabled")
@@ -244,13 +343,28 @@ class RiskGate:
             clipped = True
             order_notional = abs(delta_qty) * mark
 
+        # Graduated de-risking ladder: scale the capped target by the
+        # deepest breached tier. Multiplier 0 is the ladder's own flatten
+        # rung (distinct from invalidation, which fired above).
+        mult = self.derisk_multiplier(equity)
+        if mult <= 0.0:
+            d = RiskDecision(
+                True, 0.0, reason="derisk_force_flat", clipped=True, derisk_multiplier=0.0
+            )
+            if abs(target_signed_leverage) > 1e-12:
+                self._log_reject(symbol, target_signed_leverage, "derisk_block_new_risk", ts)
+            return d
+        if mult < 1.0:
+            t *= mult
+            clipped = True
+
         if abs(t) < 1e-12 and abs(target_signed_leverage) > 1e-12 and order_notional < 1e-9:
             d = RiskDecision(False, 0.0, reason="order_dust_after_caps", clipped=clipped)
             self._log_reject(symbol, target_signed_leverage, d.reason, ts)
             return d
 
         reason = "ok_clipped" if clipped else "ok"
-        return RiskDecision(True, t, reason=reason, clipped=clipped)
+        return RiskDecision(True, t, reason=reason, clipped=clipped, derisk_multiplier=mult)
 
     def _log_reject(self, symbol: str, target: float, reason: str, ts: str) -> None:
         self.rejects.append(

@@ -8,6 +8,7 @@ differ. The reference book is the arbiter in parity runs.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,7 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from galahad_futures.book import FuturesPaperBook
+from galahad_futures.book import FuturesPaperBook, tca_from_fills
 from galahad_futures.data import load_bars, sample_kind_for_source
 from galahad_futures.decision import SessionRisk
 from galahad_futures.report import build_summary, write_journal
@@ -36,6 +37,28 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         cfg_path = root / cfg_path
     with cfg_path.open(encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def _cost_bps(cfg: dict[str, Any]) -> tuple[float, float]:
+    """costs.spread_bps / costs.impact_bps — hard error on invalid values.
+
+    Both default 0.0 (opt-in): execution price == arrival price, which is
+    bit-identical to pre-TCA behavior.
+    """
+    costs = dict(cfg.get("costs") or {})
+    try:
+        spread = float(costs.get("spread_bps", 0.0))
+        impact = float(costs.get("impact_bps", 0.0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"costs.spread_bps/impact_bps must be numbers (got {costs!r})"
+        ) from exc
+    for name, value in (("spread_bps", spread), ("impact_bps", impact)):
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(
+                f"costs.{name} must be a non-negative finite number (got {value!r})"
+            )
+    return spread, impact
 
 
 def run_paper_on_bars(
@@ -59,9 +82,12 @@ def run_paper_on_bars(
     strategy = build_strategy(name, **kw)
     targets = strategy.targets(bars)
 
+    spread_bps, impact_bps = _cost_bps(cfg)
     book = FuturesPaperBook(
         wallet=float(cfg.get("initial_equity", 10_000)),
         fee_bps=float(cfg.get("fee_bps", 4.0)),
+        spread_bps=spread_bps,
+        impact_bps=impact_bps,
         maintenance_margin_rate=float(cfg.get("maintenance_margin_rate", 0.005)),
         funding_rate_per_bar=float(cfg.get("funding_rate_per_bar", 0.0)),
         default_leverage=float(cfg.get("default_leverage", 3.0)),
@@ -132,6 +158,7 @@ def run_paper_on_bars(
     # Session peak-to-trough max, not drawdown from peak at final equity alone
     max_dd = float(gate.max_drawdown_seen)
 
+    fills = [asdict(f) for f in book.fills]
     return {
         "engine": ENGINE_NAME,
         "engine_version": ENGINE_VERSION,
@@ -160,7 +187,9 @@ def run_paper_on_bars(
         "total_funding": float(book.total_funding),
         "n_funding_events": len(book.funding_events),
         "funding_events": book.funding_events,
-        "fills": [asdict(f) for f in book.fills],
+        "fills": fills,
+        "tca": tca_from_fills(fills),
+        "derisk": gate.derisk_summary(),
         "risk_rejects": gate.rejects,
         "risk_decisions": session.risk_decisions,
         "risk_decisions_tail": session.risk_decisions[-20:],

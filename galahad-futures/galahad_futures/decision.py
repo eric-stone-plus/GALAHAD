@@ -88,6 +88,7 @@ class SessionRisk:
             kill_switch=bool(risk_cfg_raw.get("kill_switch", True)),
             enable_live=bool(risk_cfg_raw.get("enable_live", False)),
             enable_testnet=bool(risk_cfg_raw.get("enable_testnet", False)),
+            derisk_ladder=risk_cfg_raw.get("derisk_ladder"),
             mode=mode,
         )
         return cls(gate=RiskGate(config=risk_cfg, day_start_equity=start_equity))
@@ -164,6 +165,7 @@ class SessionRisk:
                 "final_target": decision.target_signed_leverage,
                 "reason": decision.reason,
                 "clipped": decision.clipped,
+                "derisk_multiplier": decision.derisk_multiplier,
                 "invalidated": self.gate.invalidated,
                 "loss_halted": self.gate.loss_halted,
                 "pre_trade_equity": pre_trade_equity,

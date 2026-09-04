@@ -70,6 +70,18 @@ de-risking tiers, an event-window research track, kill-path drills in CI, and
 shadow parity as a standing promotion gate — feeds the P2–P3 acceptance
 criteria.
 
+**§4.2 imports, items 1–2 landed (2026-09-04):** the paper book now models
+spread + impact per fill (`costs.spread_bps`/`impact_bps`, opt-in default 0
+preserving prior evidence) and every session summary carries a TCA
+implementation-shortfall block; `risk.derisk_ladder` adds graduated
+drawdown-tiered de-risking in the shared decision path (paper, nautilus, and
+testnet engines inherit it identically), with force-flat as the terminal rung
+and fail-closed config validation. Remaining from §4.2: the sqrt-impact
+refinement of the cost model, TCA emission for the nautilus backtest engine
+(testnet already computes it from venue fills), the event-window research
+track, cross-venue basis monitoring, kill-path drills in CI, and standing
+shadow-parity promotion gates.
+
 ## 3. Risk doctrine (precedes any strategy code)
 
 1. Every execution path defaults to OFF; enabling one is an explicit human act

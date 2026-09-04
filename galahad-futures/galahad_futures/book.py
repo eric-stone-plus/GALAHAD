@@ -2,6 +2,13 @@
 
 Deterministic pure accounting. No I/O. Unit-tested on fixed price paths.
 Not an exchange matching engine — mid/low-frequency research substrate.
+
+Fill convention: the decision for bar t is evaluated at bar t's close
+(the arrival price); orders fill at that close adjusted by the optional
+spread/impact cost model (``costs.spread_bps`` / ``costs.impact_bps``,
+both default 0 = execution price identical to arrival). The per-fill
+arrival-vs-execution detail feeds the session TCA block
+(``tca_from_fills``).
 """
 
 from __future__ import annotations
@@ -16,11 +23,16 @@ class Fill:
     symbol: str
     side: str  # BUY / SELL (increases long / increases short when reducing opposite)
     qty: float  # base asset quantity, always >= 0
-    price: float
+    price: float  # execution price (arrival adjusted by the cost model)
     fee: float
     realized_pnl: float = 0.0
     note: str = ""
     leverage: float = 1.0
+    # TCA detail: the decision (bar close) price this fill executed against,
+    # and the USDT cost split of the execution-price adjustment.
+    arrival_price: float | None = None
+    spread_cost: float = 0.0
+    impact_cost: float = 0.0
 
     @property
     def notional(self) -> float:
@@ -74,6 +86,11 @@ class FuturesPaperBook:
     fills: list[Fill] = field(default_factory=list)
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     fee_bps: float = 4.0
+    # Transaction-cost model (linear bps on notional): execution price =
+    # arrival × (1 ± (spread_bps/2 + impact_bps)/10⁴), signed by side.
+    # Both 0.0 = OFF: execution price == arrival price (bit-identical).
+    spread_bps: float = 0.0
+    impact_bps: float = 0.0
     maintenance_margin_rate: float = 0.005
     funding_rate_per_bar: float = 0.0
     default_leverage: float = 3.0
@@ -276,6 +293,25 @@ class FuturesPaperBook:
             return 0.0
         return max(0.0, avail / cost_per_unit)
 
+    def _exec_price(self, arrival: float, signed_qty: float) -> float:
+        """Execution price: arrival adjusted by half-spread + linear impact.
+
+        Buys pay up, sells receive less. With spread_bps = impact_bps = 0
+        this is arrival × 1.0 exactly (backward-compatible identity).
+        """
+        rate = (self.spread_bps / 2.0 + self.impact_bps) / 10_000.0
+        if rate == 0.0:
+            return float(arrival)
+        return float(arrival) * (1.0 + rate) if signed_qty > 0 else float(arrival) * (1.0 - rate)
+
+    def _cost_split(self, qty: float, arrival: float) -> tuple[float, float]:
+        """(spread_cost, impact_cost) in USDT for a fill of qty at arrival."""
+        notional = abs(qty) * float(arrival)
+        return (
+            notional * (self.spread_bps / 2.0) / 10_000.0,
+            notional * self.impact_bps / 10_000.0,
+        )
+
     def market_order(
         self,
         symbol: str,
@@ -287,6 +323,12 @@ class FuturesPaperBook:
         leverage: float | None = None,
     ) -> Fill | None:
         """Signed qty: >0 buy/increase long, <0 sell/increase short.
+
+        ``price`` is the arrival price (the bar close the decision was
+        evaluated at). The execution price is arrival adjusted by the
+        spread/impact cost model; sizing happens upstream at arrival,
+        while all fill economics (realized PnL, entry, fees, margin
+        affordability) use the execution price.
 
         Margin enforced on any exposure increase (open from flat, same-side add,
         and flip residual open). Fees charged once per leg (close + open).
@@ -303,6 +345,8 @@ class FuturesPaperBook:
 
         signed_qty = float(qty)
         fill_qty = abs(signed_qty)
+        exec_price = self._exec_price(price, signed_qty)
+        spread_cost, impact_cost = self._cost_split(fill_qty, price)
 
         # --- Opposite-side: reduce / close / flip ---
         if abs(pos.qty) > 1e-12 and (pos.qty * signed_qty) < 0:
@@ -310,13 +354,13 @@ class FuturesPaperBook:
             open_qty = fill_qty - close_qty  # residual that opens new side
 
             if pos.qty > 0:
-                realized = (price - pos.entry_price) * close_qty
+                realized = (exec_price - pos.entry_price) * close_qty
                 pos.qty -= close_qty
             else:
-                realized = (pos.entry_price - price) * close_qty
+                realized = (pos.entry_price - exec_price) * close_qty
                 pos.qty += close_qty
 
-            close_fee = self._fee(close_qty * price)
+            close_fee = self._fee(close_qty * exec_price)
             self.wallet += realized - close_fee
 
             if abs(pos.qty) < 1e-12:
@@ -327,14 +371,14 @@ class FuturesPaperBook:
             opened = 0.0
             if open_qty > 1e-12:
                 # Margin-cap residual open (same rules as a fresh open)
-                max_open = self._max_add_qty(symbol, price, lev)
+                max_open = self._max_add_qty(symbol, exec_price, lev)
                 opened = min(open_qty, max_open)
                 if opened > 1e-12:
-                    open_fee = self._fee(opened * price)
+                    open_fee = self._fee(opened * exec_price)
                     self.wallet -= open_fee
                     signed_open = opened if signed_qty > 0 else -opened
                     pos.qty = signed_open
-                    pos.entry_price = price
+                    pos.entry_price = exec_price
                 else:
                     opened = 0.0
 
@@ -346,30 +390,34 @@ class FuturesPaperBook:
                 symbol=symbol,
                 side=side,
                 qty=total_qty,
-                price=float(price),
+                price=float(exec_price),
                 fee=float(total_fee),
                 realized_pnl=float(realized),
                 note=note or ("flip" if opened > 1e-12 else "reduce_or_close"),
                 leverage=lev,
+                arrival_price=float(price),
+                spread_cost=float(spread_cost),
+                impact_cost=float(impact_cost),
             )
             self.fills.append(fill)
             return fill
 
         # --- Same-side add or open from flat: enforce margin on full increase ---
-        max_add = self._max_add_qty(symbol, price, lev)
+        max_add = self._max_add_qty(symbol, exec_price, lev)
         if max_add < 1e-12:
             return None
         if fill_qty > max_add + 1e-12:
             fill_qty = max_add
             signed_qty = fill_qty if signed_qty > 0 else -fill_qty
+            spread_cost, impact_cost = self._cost_split(fill_qty, price)
 
-        fee = self._fee(fill_qty * price)
+        fee = self._fee(fill_qty * exec_price)
         if abs(pos.qty) < 1e-12:
-            pos.entry_price = price
+            pos.entry_price = exec_price
             pos.qty = signed_qty
         else:
             new_abs = abs(pos.qty) + fill_qty
-            pos.entry_price = (pos.entry_price * abs(pos.qty) + price * fill_qty) / new_abs
+            pos.entry_price = (pos.entry_price * abs(pos.qty) + exec_price * fill_qty) / new_abs
             pos.qty = pos.qty + signed_qty
 
         self.wallet -= fee
@@ -379,11 +427,14 @@ class FuturesPaperBook:
             symbol=symbol,
             side=side,
             qty=fill_qty,
-            price=float(price),
+            price=float(exec_price),
             fee=float(fee),
             realized_pnl=0.0,
             note=note or "open_or_add",
             leverage=lev,
+            arrival_price=float(price),
+            spread_cost=float(spread_cost),
+            impact_cost=float(impact_cost),
         )
         self.fills.append(fill)
         return fill
@@ -430,3 +481,55 @@ class FuturesPaperBook:
                 for s, p in self.positions.items()
             },
         }
+
+
+def tca_from_fills(fills: list[dict[str, Any]]) -> dict[str, Any]:
+    """Implementation-shortfall block over fill records (mappings).
+
+    Per fill, implementation shortfall = (exec − arrival) × qty for BUY,
+    (arrival − exec) × qty for SELL — the cost of crossing from the
+    decision (arrival) price to the fill price. Fees are reported
+    separately (``fee_cost_usdt``), not folded into the shortfall.
+    Fills without an ``arrival_price`` are excluded. When any included
+    fill lacks the spread/impact decomposition (e.g. venue fills, where
+    only the total shortfall is observable), the split fields are None.
+    """
+    arrival_notional = 0.0
+    filled_notional = 0.0
+    is_usdt = 0.0
+    fee_usdt = 0.0
+    spread_usdt = 0.0
+    impact_usdt = 0.0
+    decomposed = True
+    n = 0
+    for f in fills:
+        arrival = f.get("arrival_price")
+        if arrival is None:
+            continue
+        arrival = float(arrival)
+        qty = float(f.get("qty", 0.0))
+        px = float(f.get("price", 0.0))
+        sign = 1.0 if str(f.get("side", "")).upper() == "BUY" else -1.0
+        arrival_notional += qty * arrival
+        filled_notional += qty * px
+        is_usdt += sign * (px - arrival) * qty
+        fee_usdt += float(f.get("fee") or 0.0)
+        sc, ic = f.get("spread_cost"), f.get("impact_cost")
+        if sc is None or ic is None:
+            decomposed = False
+        else:
+            spread_usdt += float(sc)
+            impact_usdt += float(ic)
+        n += 1
+    return {
+        "arrival_notional": float(arrival_notional),
+        "filled_notional": float(filled_notional),
+        "implementation_shortfall_usdt": float(is_usdt),
+        "implementation_shortfall_bps": float(
+            is_usdt / arrival_notional * 10_000.0 if arrival_notional > 0 else 0.0
+        ),
+        "spread_cost_usdt": float(spread_usdt) if decomposed else None,
+        "impact_cost_usdt": float(impact_usdt) if decomposed else None,
+        "fee_cost_usdt": float(fee_usdt),
+        "n_fills": int(n),
+    }

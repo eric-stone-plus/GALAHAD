@@ -85,9 +85,10 @@ Primary artifacts: `output/paper_journal_*.json`, `output/paper_last_summary.jso
 1. **Paper is default** — no API keys required.
 2. **Targets ≠ orders** — `DualMAStrategy.targets` → `RiskGate.filter_target` → `FuturesPaperBook.apply_target`.
 3. **Futures accounting** — long/short, leverage, MTM equity, maintenance margin, forced liquidation.
-4. **Hard caps** — max order/position notional, max daily loss, max leverage; oversized targets clipped or rejected *before* fill.
-5. **Data** — `source=fixture` offline; `source=parquet` offline from the parquet cache; `auto` tries venue REST, then CSV cache, then parquet cache, then fixture (required when network is blocked).
-6. **Ops automation** — in-repo cycle scripts only; **must not place orders** (see `docs/evaluation.md`).
+4. **Hard caps** — max order/position notional, max daily loss, max leverage; oversized targets clipped or rejected *before* fill. Optional **graduated de-risking** (`risk.derisk_ladder`) scales targets down in drawdown tiers ahead of the terminal force-flat (default OFF).
+5. **Realistic costs** — optional spread + impact model on paper fills (`costs.spread_bps`/`impact_bps`, default 0 = prior behavior bit-identical); every session summary carries a **TCA / implementation-shortfall** block (arrival vs fill, cost split; per-fill detail in the journal).
+6. **Data** — `source=fixture` offline; `source=parquet` offline from the parquet cache; `auto` tries venue REST, then CSV cache, then parquet cache, then fixture (required when network is blocked).
+7. **Ops automation** — in-repo cycle scripts only; **must not place orders** (see `docs/evaluation.md`).
 
 ## Non-goals (v0.1)
 

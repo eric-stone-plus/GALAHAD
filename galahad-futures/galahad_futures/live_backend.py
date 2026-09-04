@@ -40,6 +40,7 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
+from galahad_futures.book import tca_from_fills
 from galahad_futures.decision import SessionRisk
 from galahad_futures.strategy import build_strategy, strategy_kwargs_from_config
 
@@ -281,6 +282,10 @@ def build_live_result(
         "n_funding_events": len(funding_events),
         "funding_events": list(funding_events),
         "fills": list(fills),
+        # Venue fills vs decision-bar close (arrival): total shortfall is
+        # observable; the spread/impact split is None for venue fills.
+        "tca": tca_from_fills(list(fills)),
+        "derisk": gate.derisk_summary(),
         "risk_rejects": gate.rejects,
         "risk_decisions": session.risk_decisions,
         "risk_decisions_tail": session.risk_decisions[-20:],
@@ -429,6 +434,10 @@ def _run_node(
             self.equity_curve: list[dict[str, Any]] = []
             self.account_curve: list[dict[str, Any]] = []
             self.bars_seen = 0
+            # Arrival price (decision bar close) of the most recently
+            # submitted order — one order per bar, fills arrive before the
+            # next bar, so a single slot suffices for the TCA record.
+            self._pending_arrival: float | None = None
             self._rows: list[dict[str, Any]] = [
                 {
                     "ts": str(row["ts"]),
@@ -492,6 +501,9 @@ def _run_node(
                         "realized_pnl": 0.0,
                         "note": "nautilus_live",
                         "leverage": default_leverage,
+                        # Decision bar close this order was submitted at;
+                        # venue fills carry no spread/impact decomposition.
+                        "arrival_price": self._pending_arrival,
                     }
                 )
             elif "Liquidation" in cls:
@@ -562,6 +574,7 @@ def _run_node(
                     )
                     self.submitted += 1
                     self.expected_qty = qty + delta_q
+                    self._pending_arrival = mark
                 else:
                     self.expected_qty = qty
 

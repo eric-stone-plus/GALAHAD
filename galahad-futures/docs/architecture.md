@@ -28,9 +28,10 @@
 - **Execution backends** implement a narrow surface
   (`equity`, `position`, `rebalance_to`, `settle_bar`, `collect`).
   - `paper` — the reference backend: `FuturesPaperBook`, deterministic
-    pure accounting, fills at bar close, per-bar funding, margin-capped
-    adds, maintenance-margin liquidation. Default engine; zero extra
-    dependencies.
+    pure accounting, fills at bar close (arrival price = decision close;
+    optional spread/impact cost model adjusts the execution price),
+    per-bar funding, margin-capped adds, maintenance-margin liquidation.
+    Default engine; zero extra dependencies.
   - `nautilus` — NautilusTrader `BacktestEngine` backend: the same
     decisions are submitted as orders against synthetic L1 books derived
     from the OHLC bars (close-path fills, taker fees, Nautilus's own
@@ -77,7 +78,7 @@ Session phases and transitions:
 | `ACTIVE` | trading allowed |
 | `LOSS_HALTED` | daily-loss floor breached; force flat until equity recovers past floor + `daily_loss_hysteresis` |
 | `INVALIDATED` | drawdown trip (terminal for the session) |
-| `LIVE_BLOCKED` | live mode with kill switch / `enable_live` off |
+| `LIVE_BLOCKED` | live mode (blocked unconditionally), or testnet mode with kill switch on / `enable_testnet` off |
 | `LIQUIDATED` | executor-reported liquidation (terminal) |
 
 Legal transitions: `ACTIVE ↔ LOSS_HALTED`; `ACTIVE → INVALIDATED`;
@@ -91,6 +92,82 @@ above the daily-loss floor). The parity tool uses these to flag
 `boundary_crossing` — sessions where the engines land on opposite sides
 of a trip line — and reports threshold sensitivity scans around the
 configured bands.
+
+## Graduated de-risking ladder
+
+`risk.derisk_ladder` replaces purely binary block/force-flat responses
+with Millennium-style tiers: a list of `{drawdown, leverage_multiplier}`
+rungs, ascending in drawdown, each scaling the session's targets down
+once the session's peak-to-trough drawdown breaches the rung.
+
+- **Semantics.** The gate evaluates the ladder on the pre-trade equity
+  drawdown of each decision and picks the *deepest breached* tier; the
+  target (after the existing sizing caps) is multiplied by that tier's
+  `leverage_multiplier`. A tier counts as breached at exactly its
+  threshold (`dd >= drawdown`). Below the first tier the multiplier is
+  1.0 — zero effect.
+- **Terminal rung.** Multiplier 0.0 forces target flat (decision
+  `derisk_force_flat`, new risk logged as `derisk_block_new_risk`) —
+  the ladder's own flatten, distinct from invalidation.
+- **Interaction with existing gates — strictly earlier/softer.** The
+  ladder runs *after* the terminal force-flat checks in
+  `filter_target` and only ever shrinks targets; it never weakens,
+  delays, or replaces an existing gate. Invalidation
+  (`max_drawdown_pct`) and the daily-loss halt (with its hysteresis
+  band) still fire at exactly their own thresholds; the intended
+  configuration places ladder rungs at shallower drawdowns than the
+  invalidation trip. Rungs deeper than the trip are dead config
+  (invalidation fires first) — allowed, but pointless.
+- **Fail-closed validation.** The ladder is validated and normalized at
+  gate construction (every engine builds its gate through
+  `SessionRisk.from_config`, so paper, nautilus, and testnet inherit it
+  identically — parity holds by construction). Malformed config is a
+  hard `ValueError`: non-ascending drawdowns, drawdowns outside
+  `(0, 1]`, multipliers outside `[0, 1]`, missing keys, wrong types.
+- **Evidence.** Every decision record carries `derisk_multiplier`; the
+  summary gains a `derisk` block: `ladder_enabled`, `tiers_triggered`
+  (rungs breached at the session max drawdown), `min_multiplier`.
+- **Default OFF.** `derisk_ladder: []` (the default) is exactly the
+  pre-ladder behavior.
+
+## Transaction-cost analysis (TCA)
+
+The paper book previously charged only taker fees. It now optionally
+models spread + impact per fill, and every engine session emits a TCA
+block so backtest and (testnet) venue fills are comparable on the same
+cost basis (docs/top-tier-quant-firms.md §4.2, item 1).
+
+- **Arrival-price convention (was implicit, now documented).** The
+  decision for bar *t* is evaluated at bar *t*'s **close**; the
+  resulting order fills at that same close ("close-path fills"). The
+  bar close is therefore the *arrival price*: the price the decision
+  layer saw. Target → quantity sizing uses the arrival price; all fill
+  economics use the execution price.
+- **Cost model.** `costs.spread_bps` + `costs.impact_bps`, linear bps
+  on notional (a sqrt-impact refinement is a later slice). Execution
+  price = arrival × (1 ± (spread_bps/2 + impact_bps)/10⁴) — buys pay
+  up, sells receive less. The existing taker fee stays separate and is
+  charged on executed notional. Invalid values (negative, non-finite,
+  non-numeric) are a hard `ValueError` at session construction.
+- **Backward compatibility.** Both default to `0.0` (opt-in), which is
+  bit-identical to pre-TCA behavior (execution price = arrival × 1.0
+  exactly); prior evidence remains reproducible. Suggested realistic
+  starting points live in the `config.yaml` comment.
+- **TCA block** (summary; per-fill detail in the journal):
+  `arrival_notional`, `filled_notional`,
+  `implementation_shortfall_usdt` (Σ |exec − arrival| × qty, signed by
+  side — spread + impact only; fees are *not* folded in),
+  `implementation_shortfall_bps` (per arrival notional),
+  `spread_cost_usdt`, `impact_cost_usdt`, `fee_cost_usdt`, `n_fills`.
+  Every paper fill record carries `arrival_price`, `spread_cost`,
+  `impact_cost` alongside `price`/`fee`.
+- **Other engines.** The testnet backend records the decision bar's
+  close as each order's arrival price and computes the same block from
+  venue fills; `spread_cost_usdt`/`impact_cost_usdt` are `null` there
+  because the split is not separately observable on venue fills (only
+  total shortfall is). The nautilus backtest engine emits no `tca`
+  block: its synthetic close-path fills equal the arrival price by
+  construction, so the block would only measure quantization dust.
 
 ## Data layer (P0 parquet slice)
 

@@ -472,6 +472,7 @@ def run_nautilus_on_bars(
         "account_curve": list(strategy_obj.account_curve),
         "orders_submitted": int(strategy_obj.submitted),
         "orders_filled": len(fills),
+        "derisk": gate.derisk_summary(),
         "oos_equity_curve_len": len(oos_curve),
         "returns_oos": rets,
         "total_funding": float(strategy_obj.total_funding),

@@ -71,6 +71,11 @@ def build_summary(
         summary["venue"] = result["venue"]
     if result.get("reconciliation") is not None:
         summary["reconciliation"] = result["reconciliation"]
+    # TCA / de-risking evidence blocks (present on engines that compute them).
+    if result.get("tca") is not None:
+        summary["tca"] = result["tca"]
+    if result.get("derisk") is not None:
+        summary["derisk"] = result["derisk"]
     return summary
 
 
@@ -100,6 +105,10 @@ def write_journal(
         journal["reconciliation"] = result["reconciliation"]
         journal["orders_submitted"] = result.get("orders_submitted")
         journal["orders_filled"] = result.get("orders_filled")
+    if result.get("tca") is not None:
+        journal["tca"] = result["tca"]
+    if result.get("derisk") is not None:
+        journal["derisk"] = result["derisk"]
 
     journal_path = out_dir / f"paper_journal_{run_id}.json"
     summary_path = out_dir / "paper_last_summary.json"

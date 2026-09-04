@@ -30,6 +30,24 @@ risk:
   kill_switch: true  # true = refuse live/testnet order placement; paper always allowed
   enable_live: false   # inert: mode=live (mainnet) is blocked unconditionally
   enable_testnet: false  # testnet engine passes the gate only when true AND kill_switch false
+  # Graduated de-risking ladder (default [] = OFF, pre-ladder behavior exact):
+  # tiers ascending in drawdown, leverage_multiplier in [0,1]; the deepest
+  # breached tier scales all targets; 0.0 forces flat (the ladder's own rung —
+  # max_drawdown_pct invalidation still fires at its own threshold above it).
+  # Malformed ladders (non-ascending, out-of-range) are a hard config error.
+  # Suggested: [{drawdown: 0.05, leverage_multiplier: 0.5},
+  #             {drawdown: 0.075, leverage_multiplier: 0.0}]
+  derisk_ladder: []
+
+# Transaction-cost model for paper fills (TCA; docs/architecture.md).
+# Execution price = arrival (bar close) × (1 ± (spread_bps/2 + impact_bps)/1e4),
+# signed by side; the taker fee above stays separate. Linear bps on notional —
+# a sqrt-impact refinement is a later slice. Both 0 = OFF and bit-identical to
+# pre-TCA behavior (prior evidence stays reproducible). Suggested realistic
+# starting points for BTCUSDT perp taker flow: spread_bps: 1.0, impact_bps: 2.0.
+costs:
+  spread_bps: 0.0
+  impact_bps: 0.0
 
 # Binance USDT-M futures TESTNET backend (--engine nautilus_live).
 # Requires: risk.enable_testnet: true, risk.kill_switch: false, the
