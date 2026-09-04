@@ -247,6 +247,9 @@ def build_live_result(
     positions: dict[str, Any],
     orders_submitted: int,
     orders_filled: int,
+    instrument_missing_skips: int = 0,
+    orders_denied: int = 0,
+    denials: list[dict[str, Any]] | None = None,
     warmup_bars: int,
     live_bars: int,
     initial_equity: float,
@@ -319,6 +322,9 @@ def build_live_result(
         "positions": dict(positions),
         "orders_submitted": int(orders_submitted),
         "orders_filled": int(orders_filled),
+        "instrument_missing_skips": int(instrument_missing_skips),
+        "orders_denied": int(orders_denied),
+        "denials": list(denials or []),
         "reconciliation": reconciliation,
         "expected_final_qty": float(expected_qty),
         "venue_final_qty": None if venue_qty is None else float(venue_qty),
@@ -455,6 +461,9 @@ def _run_node(
             self.equity_source = "config_fallback"
             self.expected_qty = 0.0
             self.submitted = 0
+            self.instrument_missing_skips = 0
+            self.orders_denied = 0
+            self.denials: list[dict[str, Any]] = []
             self.fills: list[dict[str, Any]] = []
             self.liquidated_events: list[dict[str, Any]] = []
             self.equity_curve: list[dict[str, Any]] = []
@@ -511,6 +520,9 @@ def _run_node(
 
         def on_start(self) -> None:
             self.started = True
+            # Load the venue instrument into the cache before any order path
+            # can touch it; submissions gate on its presence below.
+            self.subscribe_instrument(instrument_id)
             self.subscribe_bars(bar_type)
 
         def on_event(self, event) -> None:
@@ -532,6 +544,17 @@ def _run_node(
                         "arrival_price": self._pending_arrival,
                     }
                 )
+            elif cls == "OrderDenied":
+                # A denied order breaks decision/venue parity; fail closed
+                # by halting the session (kept separate from liquidations).
+                self.orders_denied += 1
+                self.denials.append(
+                    {
+                        "ts": _iso(int(getattr(event, "ts_init", 0))),
+                        "reason": str(getattr(event, "reason", ""))[:200],
+                    }
+                )
+                self.halted = True
             elif "Liquidation" in cls:
                 self.liquidated_events.append(
                     {"ts": _iso(int(getattr(event, "ts_init", 0))), "detector": "venue_event"}
@@ -582,27 +605,34 @@ def _run_node(
             )
             if decision.allowed and not self.liquidated_events:
                 instrument = self.cache.instrument(instrument_id)
-                size_precision = int(instrument.size_precision) if instrument else 3
-                min_qty = float(instrument.size_increment) if instrument else 1e-3
-                delta = order_delta_for_decision(
-                    target_signed_leverage=decision.target_signed_leverage,
-                    equity=pre_eq,
-                    mark=mark,
-                    current_qty=qty,
-                )
-                delta_q = quantize_delta(delta, size_precision)
-                if abs(delta_q) >= min_qty:
-                    side = OrderSide.BUY if delta_q > 0 else OrderSide.SELL
-                    self.submit_order(
-                        self.order_factory.market(
-                            instrument_id, side, Quantity(abs(delta_q), size_precision)
-                        )
-                    )
-                    self.submitted += 1
-                    self.expected_qty = qty + delta_q
-                    self._pending_arrival = mark
-                else:
+                if instrument is None:
+                    # Fail closed: never submit against an unknown instrument
+                    # (the venue RiskEngine would deny it anyway, which reads
+                    # as a spurious external-flatten downstream).
+                    self.instrument_missing_skips += 1
                     self.expected_qty = qty
+                else:
+                    size_precision = int(instrument.size_precision)
+                    min_qty = float(instrument.size_increment)
+                    delta = order_delta_for_decision(
+                        target_signed_leverage=decision.target_signed_leverage,
+                        equity=pre_eq,
+                        mark=mark,
+                        current_qty=qty,
+                    )
+                    delta_q = quantize_delta(delta, size_precision)
+                    if abs(delta_q) >= min_qty:
+                        side = OrderSide.BUY if delta_q > 0 else OrderSide.SELL
+                        self.submit_order(
+                            self.order_factory.market(
+                                instrument_id, side, Quantity(abs(delta_q), size_precision)
+                            )
+                        )
+                        self.submitted += 1
+                        self.expected_qty = qty + delta_q
+                        self._pending_arrival = mark
+                    else:
+                        self.expected_qty = qty
 
             venue_qty_after = self._venue_qty()
             if venue_qty_after is not None and infer_external_flatten(
@@ -736,6 +766,9 @@ def _run_node(
         positions=positions,
         orders_submitted=strategy_obj.submitted,
         orders_filled=len(strategy_obj.fills),
+        instrument_missing_skips=strategy_obj.instrument_missing_skips,
+        orders_denied=strategy_obj.orders_denied,
+        denials=strategy_obj.denials,
         warmup_bars=len(warmup),
         live_bars=strategy_obj.bars_seen,
         initial_equity=strategy_obj.initial_equity,

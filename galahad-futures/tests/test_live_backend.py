@@ -489,3 +489,46 @@ def test_url_overrides_fail_closed_on_bad_scheme():
         live_backend.testnet_url_overrides({"testnet": {"rest_url": "http://x"}})
     with pytest.raises(ValueError, match="wss"):
         live_backend.testnet_url_overrides({"testnet": {"ws_url": "https://x"}})
+
+
+def test_live_result_denial_fields_default_zero():
+    cfg = {**load_config(), "mode": "testnet"}
+    result = _fake_live_result(cfg)
+    assert result["instrument_missing_skips"] == 0
+    assert result["orders_denied"] == 0
+    assert result["denials"] == []
+
+
+def test_live_result_denial_fields_passthrough():
+    cfg = {**load_config(), "mode": "testnet"}
+    session = SessionRisk.from_config(cfg, start_equity=10_000.0)
+    result = live_backend.build_live_result(
+        cfg=cfg,
+        symbol="BTCUSDT",
+        strategy_name="tsmom",
+        strategy_kwargs={"lookback": 48},
+        session=session,
+        fills=[],
+        equity_curve=[{"ts": "2026-01-01T00:00:00+00:00", "equity": 10_000.0}],
+        account_curve=[{"ts": "2026-01-01T00:00:00+00:00", "equity": 10_000.0}],
+        funding_events=[],
+        liquidation_events=[],
+        positions={},
+        orders_submitted=1,
+        orders_filled=0,
+        instrument_missing_skips=2,
+        orders_denied=1,
+        denials=[{"ts": "2026-01-01T00:01:00+00:00", "reason": "instrument not found"}],
+        warmup_bars=400,
+        live_bars=3,
+        initial_equity=10_000.0,
+        final_equity=10_000.0,
+        expected_qty=0.0,
+        venue_qty=0.0,
+        session_seconds=65.0,
+        max_minutes=30.0,
+        equity_source="venue",
+    )
+    assert result["instrument_missing_skips"] == 2
+    assert result["orders_denied"] == 1
+    assert result["denials"][0]["reason"] == "instrument not found"
