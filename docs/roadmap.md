@@ -63,6 +63,13 @@ screening; the port is lookahead-free by construction (every factor at row t
 uses only rows ≤ t) and covered by hand-computed and mutation-based
 no-lookahead tests.
 
+**Execution benchmarking (2026-09-04):** `top-tier-quant-firms.md` maps the
+strategy and execution taxonomy of top-tier quantitative firms onto this
+roadmap. Its import list — TCA/implementation-shortfall reporting, graduated
+de-risking tiers, an event-window research track, kill-path drills in CI, and
+shadow parity as a standing promotion gate — feeds the P2–P3 acceptance
+criteria.
+
 ## 3. Risk doctrine (precedes any strategy code)
 
 1. Every execution path defaults to OFF; enabling one is an explicit human act
