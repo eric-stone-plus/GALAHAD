@@ -243,7 +243,12 @@ bounded stop (testnet.max_minutes) → reconcile → summary + journal
   (`OmsType.NETTING`), venue-loaded instrument (real tick/step
   precisions and minima from the testnet exchange info). Venue leverage
   is pinned from `default_leverage` via the exec client's
-  `futures_leverages`.
+  `futures_leverages`. The strategy subscribes the instrument at start
+  and **never submits against an unknown instrument** (missing-instrument
+  skips are counted in the summary); a venue `OrderDenied` event halts
+  the session immediately — both fail closed, and both surfaced in the
+  2026-09-04 rehearsal when the instrument was absent from the cache and
+  the venue RiskEngine denied the first order.
 - **Bounded session.** The node runs on a worker thread and is stopped
   from the controlling thread after `testnet.max_minutes` (default 30)
   via a thread-safe loop callback, or earlier on liquidation/halt. A
