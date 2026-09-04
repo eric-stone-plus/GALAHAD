@@ -556,3 +556,16 @@ def test_summary_passes_denial_counters_through(tmp_path):
     assert summary["orders_denied"] == 1
     assert summary["instrument_missing_skips"] == 3
     assert summary["denials"][0]["reason"] == "r"
+
+
+def test_passes_min_notional_gate():
+    assert live_backend.passes_min_notional(0.001, 80_000.0, 50.0) is True   # $80
+    assert live_backend.passes_min_notional(0.0005, 80_000.0, 50.0) is False  # $40
+    assert live_backend.passes_min_notional(0.0, 80_000.0, 50.0) is False
+    assert live_backend.passes_min_notional(-0.001, 80_000.0, 0.0) is True
+
+
+def test_live_result_rejection_fields_default_and_passthrough():
+    cfg = {**load_config(), "mode": "testnet"}
+    assert _fake_live_result(cfg)["orders_rejected"] == 0
+    assert _fake_live_result(cfg)["dust_skips"] == 0

@@ -170,6 +170,11 @@ def quantize_delta(delta: float, size_precision: int) -> float:
     return math.copysign(q, float(delta)) if q > 0 else 0.0
 
 
+def passes_min_notional(delta_q: float, mark: float, min_notional: float) -> bool:
+    """Venue minimum-notional gate (Binance rejects smaller orders, -4164)."""
+    return abs(float(delta_q)) * float(mark) >= float(min_notional)
+
+
 def infer_external_flatten(
     *,
     expected_qty: float,
@@ -249,6 +254,8 @@ def build_live_result(
     orders_filled: int,
     instrument_missing_skips: int = 0,
     orders_denied: int = 0,
+    orders_rejected: int = 0,
+    dust_skips: int = 0,
     denials: list[dict[str, Any]] | None = None,
     warmup_bars: int,
     live_bars: int,
@@ -324,6 +331,8 @@ def build_live_result(
         "orders_filled": int(orders_filled),
         "instrument_missing_skips": int(instrument_missing_skips),
         "orders_denied": int(orders_denied),
+        "orders_rejected": int(orders_rejected),
+        "dust_skips": int(dust_skips),
         "denials": list(denials or []),
         "reconciliation": reconciliation,
         "expected_final_qty": float(expected_qty),
@@ -464,6 +473,8 @@ def _run_node(
             self.submitted = 0
             self.instrument_missing_skips = 0
             self.orders_denied = 0
+            self.orders_rejected = 0
+            self.dust_skips = 0
             self.denials: list[dict[str, Any]] = []
             self.fills: list[dict[str, Any]] = []
             self.liquidated_events: list[dict[str, Any]] = []
@@ -556,6 +567,18 @@ def _run_node(
                     }
                 )
                 self.halted = True
+            elif cls == "OrderRejected":
+                # Venue-side rejection after submission. Dust deltas are
+                # gated pre-trade (min qty / min notional), so a rejection
+                # reaching us is genuinely abnormal — halt fail-closed.
+                self.orders_rejected += 1
+                self.denials.append(
+                    {
+                        "ts": _iso(int(getattr(event, "ts_init", 0))),
+                        "reason": ("rejected: " + str(getattr(event, "reason", "")))[:200],
+                    }
+                )
+                self.halted = True
             elif "Liquidation" in cls:
                 self.liquidated_events.append(
                     {"ts": _iso(int(getattr(event, "ts_init", 0))), "detector": "venue_event"}
@@ -616,6 +639,10 @@ def _run_node(
                 else:
                     size_precision = int(instrument.size_precision)
                     min_qty = float(instrument.size_increment)
+                    min_notional_attr = getattr(instrument, "min_notional", None)
+                    min_notional = (
+                        float(min_notional_attr) if min_notional_attr is not None else 0.0
+                    )
                     delta = order_delta_for_decision(
                         target_signed_leverage=decision.target_signed_leverage,
                         equity=pre_eq,
@@ -623,7 +650,9 @@ def _run_node(
                         current_qty=qty,
                     )
                     delta_q = quantize_delta(delta, size_precision)
-                    if abs(delta_q) >= min_qty:
+                    if abs(delta_q) >= min_qty and passes_min_notional(
+                        delta_q, mark, min_notional
+                    ):
                         side = OrderSide.BUY if delta_q > 0 else OrderSide.SELL
                         self.submit_order(
                             self.order_factory.market(
@@ -634,6 +663,10 @@ def _run_node(
                         self.expected_qty = qty + delta_q
                         self._pending_arrival = mark
                     else:
+                        # Dust delta (below min qty or min notional): skip the
+                        # order and do NOT move expected_qty — the venue will
+                        # not hold it, so the decision layer must not either.
+                        self.dust_skips += 1
                         self.expected_qty = qty
 
             venue_qty_after = self._venue_qty()
@@ -787,6 +820,8 @@ def _run_node(
         orders_filled=len(strategy_obj.fills),
         instrument_missing_skips=strategy_obj.instrument_missing_skips,
         orders_denied=strategy_obj.orders_denied,
+        orders_rejected=strategy_obj.orders_rejected,
+        dust_skips=strategy_obj.dust_skips,
         denials=strategy_obj.denials,
         warmup_bars=len(warmup),
         live_bars=strategy_obj.bars_seen,

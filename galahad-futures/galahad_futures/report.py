@@ -72,6 +72,8 @@ def build_summary(
     if result.get("reconciliation") is not None:
         summary["reconciliation"] = result["reconciliation"]
         summary["orders_denied"] = result.get("orders_denied", 0)
+        summary["orders_rejected"] = result.get("orders_rejected", 0)
+        summary["dust_skips"] = result.get("dust_skips", 0)
         summary["instrument_missing_skips"] = result.get("instrument_missing_skips", 0)
         if result.get("denials"):
             summary["denials"] = result["denials"]
