@@ -10,3 +10,4 @@ output/*
 # keep venue cache durable for offline re-runs; ignore only temp
 data/cache/*.tmp
 .DS_Store
+*.local.yaml

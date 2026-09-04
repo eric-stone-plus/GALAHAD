@@ -33,6 +33,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import date, timedelta
 from typing import Any, Mapping
 
 import pandas as pd
@@ -222,11 +223,17 @@ class _AlpacaPaperClient:
 
     # Market data API (daily bars; write-cached by the caller)
     def get_daily_bars(self, symbols: list[str], *, limit: int) -> dict[str, pd.DataFrame]:
+        # The bars endpoint without ``start`` returns only the current-day bar,
+        # so anchor an explicit window wide enough to hold ``limit`` trading
+        # days (~252/yr, 1.5x safety) and let ``limit`` cap the tail.
+        window_days = int(limit * 365 / 252 * 1.5) + 10
+        start = (date.today() - timedelta(days=window_days)).isoformat()
         query = urllib.parse.urlencode(
             {
                 "symbols": ",".join(symbols),
                 "timeframe": "1Day",
                 "limit": int(limit),
+                "start": start,
                 "feed": "iex",
                 # v1 models no corporate actions — raw prices, documented.
                 "adjustment": "raw",

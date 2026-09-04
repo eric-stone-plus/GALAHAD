@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import urllib.parse
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -132,6 +134,36 @@ def test_venue_gate_closed_raises():
 def test_non_paper_base_url_refused():
     with pytest.raises(RuntimeError, match="paper endpoint only"):
         venue_alpaca._AlpacaPaperClient("k", "s", base_url="https://api.alpaca.markets")
+
+
+def test_get_daily_bars_anchors_explicit_start_window():
+    # Without ``start`` the Alpaca bars endpoint returns only the current-day
+    # bar; the client must anchor a window wide enough for ``limit`` trades.
+    client = venue_alpaca._AlpacaPaperClient("k", "s")
+    seen: dict[str, str] = {}
+
+    def fake_request(method: str, url: str):
+        seen["url"] = url
+        return {
+            "bars": {
+                "AAPL": [
+                    {"t": "2026-09-03T04:00:00Z", "o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "v": 100.0},
+                    {"t": "2026-09-04T04:00:00Z", "o": 1.5, "h": 2.5, "l": 1.0, "c": 2.0, "v": 200.0},
+                ]
+            }
+        }
+
+    client._request = fake_request
+    out = client.get_daily_bars(["AAPL"], limit=250)
+    qs = urllib.parse.parse_qs(urllib.parse.urlparse(seen["url"]).query)
+    assert qs["timeframe"] == ["1Day"]
+    assert qs["limit"] == ["250"]
+    assert qs["feed"] == ["iex"]
+    start = date.fromisoformat(qs["start"][0])
+    days = (date.today() - start).days
+    assert 400 <= days <= 700
+    assert len(out["AAPL"]) == 2
+    assert out["AAPL"].iloc[-1]["close"] == 2.0
 
 
 def test_cli_venue_without_credentials_fails_clean():
