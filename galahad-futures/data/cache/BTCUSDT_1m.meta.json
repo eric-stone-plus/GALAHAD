@@ -1,12 +1,12 @@
 {
-  "ts_saved": "2026-09-04T11:49:52Z",
+  "ts_saved": "2026-09-04T14:19:32Z",
   "symbol": "BTCUSDT",
   "interval": "1m",
   "n_rows": 500,
   "venue": "binance_vision",
   "rest_url": "https://data-api.binance.vision/api/v3/klines",
-  "first_ts": "2026-09-04T03:30:00+00:00",
-  "last_ts": "2026-09-04T11:49:00+00:00",
-  "last_close": 81267.35,
+  "first_ts": "2026-09-04T06:00:00+00:00",
+  "last_ts": "2026-09-04T14:19:00+00:00",
+  "last_close": 79280.0,
   "sample_kind": "venue"
 }
