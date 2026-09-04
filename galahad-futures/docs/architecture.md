@@ -249,6 +249,13 @@ bounded stop (testnet.max_minutes) → reconcile → summary + journal
   via a thread-safe loop callback, or earlier on liquidation/halt. A
   session that receives no completed bar inside its bound is a valid
   no-trade session, not an error.
+- **Endpoint overrides.** `testnet.rest_url` / `testnet.ws_url`
+  (optional) remap the testnet endpoints — e.g. to
+  `https://testnet.binancefuture.com` when the default
+  `demo-fapi.binance.com` is unreachable (observed 2026-09-04). Values
+  are validated (https/wss only) and fail closed. The session bound uses
+  a monotonic clock: OS sleep freezes it, so long sessions belong on
+  always-on hosts.
 
 ### Credential discipline (fail closed)
 

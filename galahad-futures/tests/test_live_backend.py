@@ -464,3 +464,28 @@ def test_live_testnet_session_smoke(tmp_path):
     assert summary["status"] in ("ok", "ok_invalidated", "no-trade but risk-idle OK")
     journal = json.loads(Path(summary["journal_path"]).read_text(encoding="utf-8"))
     assert journal["reconciliation"] == summary["reconciliation"]
+
+def test_url_overrides_absent_by_default():
+    assert live_backend.testnet_url_overrides({}) == {}
+    assert live_backend.testnet_url_overrides({"testnet": {"max_minutes": 30}}) == {}
+
+
+def test_url_overrides_rest_and_ws():
+    cfg = {
+        "testnet": {
+            "rest_url": "https://testnet.binancefuture.com/",
+            "ws_url": "wss://stream.binancefuture.com",
+        }
+    }
+    out = live_backend.testnet_url_overrides(cfg)
+    assert out == {
+        "base_url_http": "https://testnet.binancefuture.com",
+        "base_url_ws": "wss://stream.binancefuture.com",
+    }
+
+
+def test_url_overrides_fail_closed_on_bad_scheme():
+    with pytest.raises(ValueError, match="https"):
+        live_backend.testnet_url_overrides({"testnet": {"rest_url": "http://x"}})
+    with pytest.raises(ValueError, match="wss"):
+        live_backend.testnet_url_overrides({"testnet": {"ws_url": "https://x"}})

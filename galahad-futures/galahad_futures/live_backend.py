@@ -93,6 +93,32 @@ def testnet_max_minutes(cfg: dict[str, Any]) -> float:
     return minutes
 
 
+def testnet_url_overrides(cfg: dict[str, Any]) -> dict[str, str]:
+    """Optional endpoint overrides for the testnet clients.
+
+    ``testnet.rest_url`` (https) and ``testnet.ws_url`` (wss) remap the
+    environment's default endpoints — e.g. when the default
+    ``demo-fapi.binance.com`` is unreachable but the equivalent
+    ``testnet.binancefuture.com`` host serves the same API. Fail closed on
+    malformed values; absent keys mean the environment defaults apply.
+    """
+    opts = dict(cfg.get("testnet") or {})
+    out: dict[str, str] = {}
+    rest = opts.get("rest_url")
+    if rest is not None:
+        rest = str(rest)
+        if not rest.startswith("https://"):
+            raise ValueError(f"testnet.rest_url must be an https URL (got {rest!r})")
+        out["base_url_http"] = rest.rstrip("/")
+    ws = opts.get("ws_url")
+    if ws is not None:
+        ws = str(ws)
+        if not ws.startswith("wss://"):
+            raise ValueError(f"testnet.ws_url must be a wss URL (got {ws!r})")
+        out["base_url_ws"] = ws.rstrip("/")
+    return out
+
+
 def bar_type_str(symbol: str, interval: str) -> str:
     """Map (BTCUSDT, 1h) → 'BTCUSDT-PERP.BINANCE-1-HOUR-LAST-EXTERNAL'.
 
@@ -604,6 +630,7 @@ def _run_node(
                 api_secret=api_secret,
                 account_type=BinanceAccountType.USDT_FUTURES,
                 environment=BinanceEnvironment.TESTNET,
+                **testnet_url_overrides(cfg),
             ),
         },
         exec_clients={
@@ -616,6 +643,7 @@ def _run_node(
                 # Netting (venue one-way mode): order events carry no hedge
                 # position ids.
                 use_position_ids=False,
+                **testnet_url_overrides(cfg),
             ),
         },
         timeout_connection=30.0,

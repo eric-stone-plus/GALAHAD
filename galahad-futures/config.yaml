@@ -56,6 +56,11 @@ costs:
 # reconciled; mode in the summary is always "testnet", never "live".
 testnet:
   max_minutes: 30  # hard session bound: node stops, then reconciles positions
+  # Optional endpoint overrides (fail closed on malformed values). Use when the
+  # default demo-fapi.binance.com is unreachable but the equivalent testnet
+  # host serves the same API:
+  # rest_url: https://testnet.binancefuture.com
+  # ws_url: wss://stream.binancefuture.com
 
 # Strategy: pre-specified TSMOM (lookback fixed — not a search grid)
 # name options: tsmom (short), tsmom_long (lookback 168 ≈ 7d), dual_ma (plumbing)
