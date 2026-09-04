@@ -1,0 +1,12 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.venv/
+output/*
+!output/.gitkeep
+# keep venue cache durable for offline re-runs; ignore only temp
+data/cache/*.tmp
+.DS_Store

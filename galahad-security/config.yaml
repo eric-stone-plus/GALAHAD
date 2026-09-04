@@ -1,0 +1,64 @@
+# GALAHAD Security — equities paper session defaults (no secrets)
+# Cash account, long-only, daily bars. mode is paper money everywhere:
+# "paper" (offline book) | "venue" (Alpaca PAPER endpoint, forced by the
+# alpaca_paper engine). No live-money mode exists in this package.
+mode: paper
+
+# Multi-symbol from day one: equities are a portfolio game. The bundled
+# fixtures carry deterministic SYNTHETIC series for these tickers (labeled
+# synthetic_fixture; never presented as venue data).
+symbols: [AAPL, MSFT]
+interval: 1d
+bar_limit: 250
+
+# Capital (cash account — no leverage anywhere)
+initial_equity: 100000.0
+currency: USD
+fee_bps: 0.0  # commission bps; 0 = commission-free paper venue realism
+
+# Transaction-cost model for paper fills (TCA; docs/architecture.md).
+# Execution price = arrival (daily close) × (1 ± (spread_bps/2 + impact_bps)/1e4),
+# signed by side; the commission above stays separate. Linear bps on notional —
+# a sqrt-impact refinement is a later slice. Both 0 = OFF and bit-identical to
+# the zero-cost book. Suggested realistic starting points for liquid large-cap
+# US names: spread_bps: 1.0, impact_bps: 1.0.
+costs:
+  spread_bps: 0.0
+  impact_bps: 0.0
+
+# Risk hard caps (execution layer only)
+risk:
+  max_weight: 0.25        # per-symbol target weight cap (fraction of equity)
+  max_order_notional: 5000.0
+  max_daily_loss: 500.0
+  # Recovery band above the daily-loss floor before the halt clears
+  # (anti-flapping; 0 = legacy per-bar floor).
+  daily_loss_hysteresis: 100.0
+  max_drawdown_pct: 0.15   # session peak-to-trough → force flat (invalidation)
+  kill_switch: true  # true = refuse venue order placement; offline paper always allowed
+  enable_alpaca_paper: false  # venue engine passes the gate only when true AND kill_switch false
+  # Graduated de-risking ladder (default [] = OFF, pre-ladder behavior exact):
+  # tiers ascending in drawdown, leverage_multiplier in [0,1]; the deepest
+  # breached tier scales all targets; 0.0 forces flat (the ladder's own rung —
+  # max_drawdown_pct invalidation still fires at its own threshold above it).
+  # Malformed ladders (non-ascending, out-of-range) are a hard config error.
+  # Suggested: [{drawdown: 0.05, leverage_multiplier: 0.5},
+  #             {drawdown: 0.075, leverage_multiplier: 0.0}]
+  derisk_ladder: []
+
+# Strategy: deliberately naive long-only null (plumbing benchmark, not an
+# edge claim). Emits target weights per symbol independently.
+strategy:
+  name: dual_ma
+  fast: 8
+  slow: 21
+  target_weight: 0.2  # fraction of equity when the signal is long
+
+# Data: auto = CSV cache → synthetic fixture (offline-first, fail-closed cache
+# misses never silently refetch). Venue daily bars are fetched from the Alpaca
+# data API only by the alpaca_paper engine, which write-caches them here.
+data:
+  source: auto  # auto | fixture | cache
+  fixture_seed: 42
+
+output_dir: output

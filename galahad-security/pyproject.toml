@@ -1,0 +1,21 @@
+[project]
+name = "galahad-security"
+version = "0.1.0"
+description = "GALAHAD US-equities paper substrate (cash account, long-only, daily bars, Alpaca paper venue)"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.12"
+dependencies = [
+  "pandas",
+  "numpy",
+  "pyyaml",
+  "pytest",
+]
+
+# No optional extras: the venue path (alpaca_paper) uses stdlib urllib only.
+
+[tool.setuptools.packages.find]
+include = ["galahad_security*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

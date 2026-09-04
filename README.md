@@ -26,6 +26,7 @@ never presented to users as separate concepts.
 | `quantkit/` | Shared toolkit: factors, portfolio optimizer, conformal sizing, validation gates (purged walk-forward, DSR/PBO, block bootstrap), sentiment factors, backtest scripts |
 | `quant-desk/` | Full lifecycle pipeline — selection → optimizer → trade → review → gates (US equities and A-share variants) |
 | `galahad-futures/` | USDT-M futures paper substrate: margin book, funding, drawdown force-flat, TSMOM/RSI/Bollinger strategies, walk-forward runner |
+| `galahad-security/` | US-equities paper substrate: cash account, long-only integer shares, daily bars, weight-target strategies, de-risking ladder, TCA; Alpaca paper venue one-shot (no live path) |
 
 ## Quickstart
 
@@ -44,6 +45,11 @@ cd galahad-futures
 python -m pytest tests -q
 python scripts/run_paper.py --source fixture
 python scripts/run_cycle.py --source fixture
+
+# equities paper engine (offline fixtures, no API keys)
+cd ../galahad-security
+python -m pytest tests -q
+python scripts/run_paper.py --json
 ```
 
 A-share data fetches route through `QUANT_DESK_PROXY` when set

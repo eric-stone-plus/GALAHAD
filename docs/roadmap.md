@@ -49,9 +49,24 @@ Bailey & LdP 2014; PBO = CSCV, Bailey et al. 2017 — mirrors of
 report emits `dsr_pass = DSR > 0` and `pbo_flag = PBO > 0.5`; these are
 advisory flags, not promotion gates — they are evidence for human review.
 
-US equities run as a parallel track after P2: Alpaca paper → IBKR. A-share
+US equities run as a parallel track after P2: Alpaca paper → IBKR, with
+`galahad-security/` as the substrate (see the dated note below). A-share
 execution stays semi-automated (signal → human) unless a sanctioned channel
 becomes available.
+
+**US-equities substrate landed (2026-09-04):** `galahad-security/` is the
+equities sibling of `galahad-futures/` — cash account, long-only integer
+shares, daily bars; no leverage, funding, margin, or liquidation
+(unrepresentable states, not disabled ones). Engines: an offline reference
+cash book (`paper`) and a one-shot Alpaca **paper-endpoint** path
+(`alpaca_paper`; env credentials + enable flag + kill switch, fail closed,
+no live engine value exists). It reuses the futures doctrine by port:
+weight-target strategies, the same risk-gate pattern with the graduated
+de-risking ladder, the same TCA cost model and summary block, and a
+summary/journal contract shaped for a future STAMMTISCH security-daily
+adapter. A-share execution is explicitly out of this substrate (signal →
+human per the line above); corporate actions are out of v1 scope and
+documented as such.
 
 **Factor-library iteration (2026-08-22):** the L2 signal layer gains an exact
 pandas port of QLib's Alpha158 factor set (`quantkit.alpha158`; factor
