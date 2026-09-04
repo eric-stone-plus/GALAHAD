@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -51,12 +52,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="print summary JSON only")
     args = ap.parse_args(argv)
 
-    # --json contract: stdout carries only the summary JSON. Engines that
-    # log to stdout (the live TradingNode banner and its event stream) are
-    # diverted to stderr for the duration of the session so the
-    # machine-readable channel stays parseable; logs themselves are kept.
+    # --json contract: stdout carries only the summary JSON. The live
+    # TradingNode logs from Rust directly onto fd 1 (bypassing Python's
+    # sys.stdout), so under --json fd 1 itself is redirected onto fd 2 for
+    # the session's duration: logs are preserved on stderr and the
+    # machine-readable channel stays parseable.
     real_stdout = sys.stdout
+    saved_fd1: int | None = None
     if args.json:
+        sys.stdout.flush()
+        saved_fd1 = os.dup(1)
+        os.dup2(2, 1)
         sys.stdout = sys.stderr
     try:
         summary = run_paper_session(
@@ -74,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     finally:
+        if saved_fd1 is not None:
+            sys.stdout.flush()
+            os.dup2(saved_fd1, 1)
+            os.close(saved_fd1)
         sys.stdout = real_stdout
     if args.json:
         print(json.dumps(summary, indent=2, ensure_ascii=False))
