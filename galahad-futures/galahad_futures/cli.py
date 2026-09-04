@@ -51,6 +51,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="print summary JSON only")
     args = ap.parse_args(argv)
 
+    # --json contract: stdout carries only the summary JSON. Engines that
+    # log to stdout (the live TradingNode banner and its event stream) are
+    # diverted to stderr for the duration of the session so the
+    # machine-readable channel stays parseable; logs themselves are kept.
+    real_stdout = sys.stdout
+    if args.json:
+        sys.stdout = sys.stderr
     try:
         summary = run_paper_session(
             config_path=args.config,
@@ -66,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         # missing optional deps, missing testnet credentials, closed gate.
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    finally:
+        sys.stdout = real_stdout
     if args.json:
         print(json.dumps(summary, indent=2, ensure_ascii=False))
     else:
