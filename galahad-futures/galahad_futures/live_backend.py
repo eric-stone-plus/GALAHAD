@@ -564,6 +564,7 @@ def _run_node(
         def on_bar(self, bar) -> None:
             if self.halted:
                 return
+            submitted_before = self.submitted
             ts_iso = _iso(bar.ts_init)
             self._rows.append(
                 {
@@ -636,10 +637,18 @@ def _run_node(
                         self.expected_qty = qty
 
             venue_qty_after = self._venue_qty()
-            if venue_qty_after is not None and infer_external_flatten(
-                expected_qty=self.expected_qty,
-                venue_qty=venue_qty_after,
-                open_orders=self._open_orders(),
+            # The fill events for an order submitted on this bar arrive
+            # asynchronously AFTER this callback returns; running the
+            # flatten inference on the submission bar itself races and
+            # reads as a false liquidation. Only infer on quiet bars.
+            if (
+                venue_qty_after is not None
+                and self.submitted == submitted_before
+                and infer_external_flatten(
+                    expected_qty=self.expected_qty,
+                    venue_qty=venue_qty_after,
+                    open_orders=self._open_orders(),
+                )
             ):
                 self.liquidated_events.append({"ts": ts_iso, "detector": "external_flatten"})
             if self.liquidated_events:

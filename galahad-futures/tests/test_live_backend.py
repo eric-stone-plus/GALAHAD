@@ -532,3 +532,27 @@ def test_live_result_denial_fields_passthrough():
     assert result["instrument_missing_skips"] == 2
     assert result["orders_denied"] == 1
     assert result["denials"][0]["reason"] == "instrument not found"
+
+
+def test_summary_passes_denial_counters_through(tmp_path):
+    cfg = {**load_config(), "mode": "testnet"}
+    result = _fake_live_result(cfg)
+    result["orders_denied"] = 1
+    result["instrument_missing_skips"] = 3
+    result["denials"] = [{"ts": "t", "reason": "r"}]
+    summary = build_summary(
+        result,
+        cfg=cfg,
+        symbol="BTCUSDT",
+        interval="1h",
+        source_used="venue",
+        sample_kind="venue",
+        data_note=None,
+        out_dir=tmp_path,
+        engine=result["engine"],
+        engine_version=result["engine_version"],
+        strategy_name="tsmom",
+    )
+    assert summary["orders_denied"] == 1
+    assert summary["instrument_missing_skips"] == 3
+    assert summary["denials"][0]["reason"] == "r"

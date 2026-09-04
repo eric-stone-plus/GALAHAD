@@ -71,6 +71,10 @@ def build_summary(
         summary["venue"] = result["venue"]
     if result.get("reconciliation") is not None:
         summary["reconciliation"] = result["reconciliation"]
+        summary["orders_denied"] = result.get("orders_denied", 0)
+        summary["instrument_missing_skips"] = result.get("instrument_missing_skips", 0)
+        if result.get("denials"):
+            summary["denials"] = result["denials"]
     # TCA / de-risking evidence blocks (present on engines that compute them).
     if result.get("tca") is not None:
         summary["tca"] = result["tca"]
