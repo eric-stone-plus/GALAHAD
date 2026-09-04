@@ -2,7 +2,8 @@
 
 Hard caps: per-order notional, position notional, daily loss, leverage.
 Session drawdown invalidation forces flat (no new risk).
-Kill switch blocks live paths; paper is always allowed when mode=paper.
+Live paths: mode=live (mainnet) is blocked unconditionally; mode=testnet
+requires kill_switch off + enable_testnet on; paper is always allowed.
 
 State machine (owned here, enriched by ``decision.SessionRisk``):
 
@@ -10,7 +11,8 @@ State machine (owned here, enriched by ``decision.SessionRisk``):
       ▲                                  │            floor + hysteresis
       └──────────────────────────────────┘
     ACTIVE ── drawdown trip ──▶ INVALIDATED (terminal force-flat)
-    (live) ── kill_switch / !enable_live ──▶ LIVE_BLOCKED (per decision)
+    (live)    ── always ──▶ LIVE_BLOCKED (mainnet is never enabled here)
+    (testnet) ── kill_switch / !enable_testnet ──▶ LIVE_BLOCKED (per decision)
     (any)  ── execution-reported liquidation ──▶ LIQUIDATED (terminal)
 
 Daily-loss semantics: hitting the floor force-flattens the book (target 0
@@ -37,9 +39,10 @@ class RiskConfig:
     # Recovery band above the daily-loss floor before LOSS_HALTED clears.
     # 0.0 = clear as soon as equity returns to the floor (legacy behavior).
     daily_loss_hysteresis: float = 0.0
-    kill_switch: bool = True  # True = refuse live
-    enable_live: bool = False
-    mode: str = "paper"  # paper | live
+    kill_switch: bool = True  # True = refuse live/testnet order placement
+    enable_live: bool = False  # inert: mode=live is blocked unconditionally
+    enable_testnet: bool = False  # testnet passes only when True + kill_switch off
+    mode: str = "paper"  # paper | testnet | live
 
 
 @dataclass
@@ -86,10 +89,16 @@ class RiskGate:
         return float(equity) - self.daily_loss_floor()
 
     def live_blocked(self) -> bool:
-        if self.config.mode != "live":
-            return False
-        if self.config.kill_switch or not self.config.enable_live:
+        """Live-path gate.
+
+        mode=live (mainnet) is blocked unconditionally — this package
+        ships no mainnet path. mode=testnet passes only with the kill
+        switch off AND ``enable_testnet`` on. paper is never blocked.
+        """
+        if self.config.mode == "live":
             return True
+        if self.config.mode == "testnet":
+            return bool(self.config.kill_switch or not self.config.enable_testnet)
         return False
 
     # --- state transitions ----------------------------------------------

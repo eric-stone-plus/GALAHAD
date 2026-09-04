@@ -66,6 +66,11 @@ def build_summary(
         summary["idle_reason"] = "strategy flat or risk blocked all targets"
     if result.get("invalidated"):
         summary["status"] = "ok_invalidated" if summary["n_fills"] else summary["status"]
+    # Live-path backends (testnet): additive contract fields.
+    if result.get("venue") is not None:
+        summary["venue"] = result["venue"]
+    if result.get("reconciliation") is not None:
+        summary["reconciliation"] = result["reconciliation"]
     return summary
 
 
@@ -91,6 +96,10 @@ def write_journal(
         "funding_events": result["funding_events"],
         "positions": result["positions"],
     }
+    if result.get("reconciliation") is not None:
+        journal["reconciliation"] = result["reconciliation"]
+        journal["orders_submitted"] = result.get("orders_submitted")
+        journal["orders_filled"] = result.get("orders_filled")
 
     journal_path = out_dir / f"paper_journal_{run_id}.json"
     summary_path = out_dir / "paper_last_summary.json"

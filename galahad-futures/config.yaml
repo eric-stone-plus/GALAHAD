@@ -1,5 +1,6 @@
 # GALAHAD Futures — paper session defaults (no secrets)
-mode: paper  # paper | live  (live requires explicit env override + kill_switch off)
+mode: paper  # paper | testnet | live  (testnet requires enable_testnet + kill_switch off;
+             # live/mainnet is blocked unconditionally — this package ships no mainnet path)
 
 symbol: BTCUSDT
 market: usdtm  # crypto USDT-M perpetual first
@@ -26,8 +27,17 @@ risk:
   # (anti-flapping for automated execution; 0 = legacy per-bar floor).
   daily_loss_hysteresis: 100.0
   max_drawdown_pct: 0.15   # session peak-to-trough → force flat (invalidation)
-  kill_switch: true  # true = refuse live; paper always allowed
-  enable_live: false
+  kill_switch: true  # true = refuse live/testnet order placement; paper always allowed
+  enable_live: false   # inert: mode=live (mainnet) is blocked unconditionally
+  enable_testnet: false  # testnet engine passes the gate only when true AND kill_switch false
+
+# Binance USDT-M futures TESTNET backend (--engine nautilus_live).
+# Requires: risk.enable_testnet: true, risk.kill_switch: false, the
+# nautilus extra, and BINANCE_TESTNET_API_KEY / BINANCE_TESTNET_API_SECRET
+# env vars (mainnet key names are never read). Sessions are bounded and
+# reconciled; mode in the summary is always "testnet", never "live".
+testnet:
+  max_minutes: 30  # hard session bound: node stops, then reconciles positions
 
 # Strategy: pre-specified TSMOM (lookback fixed — not a search grid)
 # name options: tsmom (short), tsmom_long (lookback 168 ≈ 7d), dual_ma (plumbing)

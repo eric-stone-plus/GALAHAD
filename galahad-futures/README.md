@@ -7,17 +7,28 @@ Strategies emit **target signed leverage** only. A separate **risk layer** is th
 
 ## Engines
 
-One decision layer, two execution backends (`run_paper.py --engine`):
+One decision layer, three execution backends (`run_paper.py --engine`):
 
 - `paper` (default) — the reference accounting book (close-price fills,
   per-bar funding, margin caps, liquidation). The arbiter.
 - `nautilus` — NautilusTrader 1.231.0 event-driven backtest engine
   (pinned optional extra; funding applied per the reference convention
   in the harness — the v1.231 backtest has no funding settlement path).
+- `nautilus_live` — Binance USDT-M futures **testnet** execution via the
+  NautilusTrader live stack (same pinned extra; the 1.x wheel bundles
+  the Binance adapters). Testnet-only by construction: mainnet is
+  blocked unconditionally, credentials come only from
+  `BINANCE_TESTNET_API_KEY` / `BINANCE_TESTNET_API_SECRET`, the gate
+  requires `risk.enable_testnet: true` + `risk.kill_switch: false`, and
+  sessions are bounded (`testnet.max_minutes`, default 30) and
+  reconciled (`reconciliation` block in the summary).
 
-`scripts/run_parity.py` reconciles both engines on the same bars
-(schema `galahad.parity.v1`): decision diffs, equity/fill/funding diffs,
-boundary crossings, and threshold sensitivity.
+`scripts/run_parity.py` reconciles both backtest engines on the same
+bars (schema `galahad.parity.v1`): decision diffs, equity/fill/funding
+diffs, boundary crossings, and threshold sensitivity.
+`scripts/run_shadow.py` shadow-runs paper vs testnet (schema
+`galahad.shadow.v1`); real execution is env-gated (`GALAHAD_TESTNET_IT=1`)
+and the script exits non-zero listing missing preconditions otherwise.
 
 ## Layout
 
@@ -27,15 +38,17 @@ futures/
   .env.example             # no secrets in-repo
   galahad_futures/         # book, risk, strategy, data, engine, cli
   galahad_futures/decision.py       # shared decision layer (state machine)
-  galahad_futures/nautilus_backend.py  # NautilusTrader backend
+  galahad_futures/nautilus_backend.py  # NautilusTrader backtest backend
+  galahad_futures/live_backend.py      # Binance USDT-M futures TESTNET backend
   galahad_futures/report.py          # shared summary/journal assembly
   data/fixtures/           # offline OHLCV (paper always runnable)
   output/                  # journals + equity curves (gitignored content)
-  tests/                   # book/risk/decision/engine + parity tests
+  tests/                   # book/risk/decision/engine + parity + live-backend tests
   docs/strategy_research.md # strategy research notes
   docs/architecture.md      # component architecture
-  scripts/run_paper.py     # CLI launcher (--engine paper|nautilus)
+  scripts/run_paper.py     # CLI launcher (--engine paper|nautilus|nautilus_live)
   scripts/run_parity.py    # dual-engine reconciliation report
+  scripts/run_shadow.py    # paper↔testnet shadow run (env-gated)
 ```
 
 ## Quick start (paper + perception)

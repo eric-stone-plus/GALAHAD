@@ -183,8 +183,9 @@ def run_paper_session(
 ) -> dict[str, Any]:
     """Run one paper session. Returns summary dict; writes journal under output/.
 
-    engine: "paper" (default) | "nautilus". The nautilus backend requires
-    the optional nautilus_trader dependency; a missing package raises a
+    engine: "paper" (default) | "nautilus" | "nautilus_live". The nautilus
+    backends require the optional nautilus_trader dependency; a missing
+    package or (for nautilus_live) missing testnet credentials raises a
     clear usage error (never a silent fallback).
     """
     root = project_root()
@@ -258,8 +259,29 @@ def run_paper_session(
             strategy_kwargs=strat_kw,
         )
         engine_tag, engine_ver = NAUTILUS_ENGINE_NAME, NAUTILUS_ENGINE_VERSION
+    elif engine_name == "nautilus_live":
+        from galahad_futures.live_backend import (
+            ENGINE_NAME as LIVE_ENGINE_NAME,
+            ENGINE_VERSION as LIVE_ENGINE_VERSION,
+            run_live_testnet_session,
+        )
+
+        # Force testnet mode into the effective config: the summary's mode
+        # field can never read "live" on this path, and the session gate
+        # evaluates the testnet branch (enable_testnet + kill switch).
+        cfg = {**cfg, "mode": "testnet"}
+        result = run_live_testnet_session(
+            bars,
+            cfg,
+            symbol=symbol,
+            strategy_name=strat_name,
+            strategy_kwargs=strat_kw,
+        )
+        engine_tag, engine_ver = LIVE_ENGINE_NAME, LIVE_ENGINE_VERSION
     else:
-        raise ValueError(f"unknown engine: {engine_name!r} (expected paper | nautilus)")
+        raise ValueError(
+            f"unknown engine: {engine_name!r} (expected paper | nautilus | nautilus_live)"
+        )
 
     out_dir = Path(output_dir) if output_dir else root / str(cfg.get("output_dir", "output"))
     if not out_dir.is_absolute():

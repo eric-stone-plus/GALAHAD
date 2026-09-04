@@ -41,29 +41,49 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument(
         "--engine",
-        choices=("paper", "nautilus"),
+        choices=("paper", "nautilus", "nautilus_live"),
         default=None,
-        help="execution backend (default: paper reference book; "
-        "nautilus requires the optional nautilus_trader dependency)",
+        help="execution backend (default: paper reference book; nautilus "
+        "and nautilus_live require the optional nautilus_trader dependency; "
+        "nautilus_live executes on the Binance USDT-M futures TESTNET only "
+        "and requires BINANCE_TESTNET_API_KEY/BINANCE_TESTNET_API_SECRET)",
     )
     ap.add_argument("--json", action="store_true", help="print summary JSON only")
     args = ap.parse_args(argv)
 
-    summary = run_paper_session(
-        config_path=args.config,
-        force_source=args.source,
-        output_dir=args.output_dir,
-        force_strategy=args.strategy,
-        force_symbol=args.symbol,
-        force_lookback=args.lookback,
-        engine=args.engine,
-    )
+    try:
+        summary = run_paper_session(
+            config_path=args.config,
+            force_source=args.source,
+            output_dir=args.output_dir,
+            force_strategy=args.strategy,
+            force_symbol=args.symbol,
+            force_lookback=args.lookback,
+            engine=args.engine,
+        )
+    except RuntimeError as exc:
+        # Fail closed with a clean operator-facing error (no traceback dump):
+        # missing optional deps, missing testnet credentials, closed gate.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps(summary, indent=2, ensure_ascii=False))
     else:
         print("GALAHAD Futures paper session")
         print(f"  status:         {summary['status']}")
+        mode_label = "  [TESTNET — mainnet path does not exist]" if summary.get("mode") == "testnet" else ""
+        print(f"  mode:           {summary.get('mode')}{mode_label}")
         print(f"  engine:         {summary['engine']} ({summary['engine_version']})")
+        if summary.get("venue"):
+            print(f"  venue:          {summary['venue']}")
+        recon = summary.get("reconciliation")
+        if recon:
+            print(
+                "  reconciliation: "
+                f"submitted={recon['orders_submitted']} "
+                f"filled={recon['orders_filled']} "
+                f"position_mismatch={recon['position_mismatch']}"
+            )
         print(f"  strategy:       {summary.get('strategy')}")
         print(f"  symbol:         {summary['symbol']}")
         print(f"  bars:           {summary['bars']}")

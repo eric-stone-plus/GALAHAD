@@ -24,7 +24,8 @@ Session phases (derived from the risk gate + executor reports):
     LOSS_HALTED   daily-loss floor breached; force flat until equity
                   recovers past floor + hysteresis
     INVALIDATED   drawdown trip (terminal for the session)
-    LIVE_BLOCKED  live mode with kill switch / enable_live off
+    LIVE_BLOCKED  live mode (always blocked here), or testnet mode with
+                  kill switch on / enable_testnet off
     LIQUIDATED    executor-reported liquidation (terminal)
 
 Transition table (illegal transitions fail closed with ValueError):
@@ -86,6 +87,7 @@ class SessionRisk:
             daily_loss_hysteresis=float(risk_cfg_raw.get("daily_loss_hysteresis", 0.0)),
             kill_switch=bool(risk_cfg_raw.get("kill_switch", True)),
             enable_live=bool(risk_cfg_raw.get("enable_live", False)),
+            enable_testnet=bool(risk_cfg_raw.get("enable_testnet", False)),
             mode=mode,
         )
         return cls(gate=RiskGate(config=risk_cfg, day_start_equity=start_equity))
