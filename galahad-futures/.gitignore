@@ -14,3 +14,5 @@ data/cache/*.tmp
 !data/fixtures/**
 .DS_Store
 state/  # runtime cycle state, not source
+# local rehearsal/override configs (never committed; may carry env-specific gates)
+*.local.yaml
