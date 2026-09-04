@@ -157,13 +157,26 @@ def test_get_daily_bars_anchors_explicit_start_window():
     out = client.get_daily_bars(["AAPL"], limit=250)
     qs = urllib.parse.parse_qs(urllib.parse.urlparse(seen["url"]).query)
     assert qs["timeframe"] == ["1Day"]
-    assert qs["limit"] == ["250"]
+    assert "limit" not in qs  # server-side limit truncates from the oldest bar
     assert qs["feed"] == ["iex"]
     start = date.fromisoformat(qs["start"][0])
     days = (date.today() - start).days
     assert 400 <= days <= 700
     assert len(out["AAPL"]) == 2
     assert out["AAPL"].iloc[-1]["close"] == 2.0
+
+
+def test_get_daily_bars_keeps_newest_limit_rows():
+    # The window may hold more than ``limit`` bars; keep the newest tail.
+    client = venue_alpaca._AlpacaPaperClient("k", "s")
+    rows = [
+        {"t": f"2026-09-{d:02d}T04:00:00Z", "o": 1.0, "h": 2.0, "l": 0.5, "c": float(d), "v": 100.0}
+        for d in range(1, 6)
+    ]
+    client._request = lambda method, url: {"bars": {"AAPL": rows}}
+    out = client.get_daily_bars(["AAPL"], limit=3)
+    assert len(out["AAPL"]) == 3
+    assert [c for c in out["AAPL"]["close"]] == [3.0, 4.0, 5.0]
 
 
 def test_get_daily_bars_fetches_one_symbol_per_request():

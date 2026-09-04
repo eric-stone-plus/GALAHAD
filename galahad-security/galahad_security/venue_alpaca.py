@@ -225,9 +225,10 @@ class _AlpacaPaperClient:
     def get_daily_bars(self, symbols: list[str], *, limit: int) -> dict[str, pd.DataFrame]:
         # The bars endpoint without ``start`` returns only the current-day bar,
         # so anchor an explicit window wide enough to hold ``limit`` trading
-        # days (~252/yr, 1.5x safety) and let ``limit`` cap the tail.
-        # Multi-symbol requests silently drop symbols on some plans, so fetch
-        # one symbol per request.
+        # days (~252/yr, 1.5x safety). ``limit`` in the query truncates from
+        # the OLDEST bar of the window, so omit it and keep the newest
+        # ``limit`` rows client-side. Multi-symbol requests silently drop
+        # symbols on some plans, so fetch one symbol per request.
         window_days = int(limit * 365 / 252 * 1.5) + 10
         start = (date.today() - timedelta(days=window_days)).isoformat()
         out: dict[str, pd.DataFrame] = {}
@@ -236,7 +237,6 @@ class _AlpacaPaperClient:
                 {
                     "symbols": symbol,
                     "timeframe": "1Day",
-                    "limit": int(limit),
                     "start": start,
                     "feed": "iex",
                     # v1 models no corporate actions — raw prices, documented.
@@ -251,6 +251,7 @@ class _AlpacaPaperClient:
                     f"alpaca_paper: no daily bars returned for {symbol} "
                     "(fail closed — the venue session needs real history)"
                 )
+            rows = rows[-int(limit):]
             out[symbol] = pd.DataFrame(
                 [
                     {
