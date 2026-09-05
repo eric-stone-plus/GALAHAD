@@ -1,0 +1,26 @@
+[
+  {
+    "strategy": "SMA_Cross",
+    "total_return_pct": 46.75390807446398,
+    "max_drawdown_pct": 9.19062340228587,
+    "win_rate": 41.735537190082646,
+    "total_trades": 242,
+    "profit_factor": 1.5157287900267187
+  },
+  {
+    "strategy": "RSI",
+    "total_return_pct": 48.18419086289225,
+    "max_drawdown_pct": 8.792366891976274,
+    "win_rate": 68.10344827586206,
+    "total_trades": 232,
+    "profit_factor": 1.5771351431538327
+  },
+  {
+    "strategy": "Bollinger",
+    "total_return_pct": 43.00443436758978,
+    "max_drawdown_pct": 15.280940382298056,
+    "win_rate": 67.69911504424779,
+    "total_trades": 226,
+    "profit_factor": 1.5122991683807794
+  }
+]

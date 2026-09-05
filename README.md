@@ -21,12 +21,13 @@ never presented to users as separate concepts.
 | Path | What it is |
 |---|---|
 | `.agents/skills/` | Six installed Wave A public-markets research skills; each owns one bounded procedure and emits auditable artifacts |
-| `docs/` | Research notebook: roadmap, data stack, strategy foundations, and the professional-finance skill architecture |
+| `docs/` | Research notebook: roadmap, data stack, strategy foundations, trading-system architecture, exchange integration, and the professional-finance skill architecture |
 | `researchkit/` | Offline v2 artifact-graph validation plus deterministic SEC normalization, financial-statement, DCF, and trading-comps kernels |
 | `quantkit/` | Shared toolkit: factors, portfolio optimizer, conformal sizing, validation gates (purged walk-forward, DSR/PBO, block bootstrap), sentiment factors, backtest scripts |
 | `quant-desk/` | Full lifecycle pipeline — selection → optimizer → trade → review → gates (US equities and A-share variants) |
 | `galahad-futures/` | USDT-M futures paper substrate: margin book, funding, drawdown force-flat, TSMOM/RSI/Bollinger strategies, walk-forward runner |
 | `galahad-security/` | US-equities paper substrate: cash account, long-only integer shares, daily bars, weight-target strategies, de-risking ladder, TCA; Alpaca paper venue one-shot (no live path) |
+| `galahad-crypto/` | Crypto research workbench (backtest-only): strategy backtester with deterministic offline data, execution-layer RL sandbox with pre-registered verdicts, pinned public OHLCV cache |
 
 ## Quickstart
 
@@ -50,6 +51,11 @@ python scripts/run_cycle.py --source fixture
 cd ../galahad-security
 python -m pytest tests -q
 python scripts/run_paper.py --json
+
+# crypto research workbench (offline, deterministic sample data)
+cd ../galahad-crypto
+python tools/crypto_backtest.py
+cd research/execution-rl && python -m pytest tests -q
 ```
 
 A-share data fetches route through `QUANT_DESK_PROXY` when set

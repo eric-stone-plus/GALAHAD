@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.DS_Store
+# data/cache/*.parquet is intentional pinned public OHLCV research data
+# (reproducible offline runs without exchange access) — NOT ignored.
+# output/ holds recorded experiment evidence — NOT ignored.
