@@ -110,9 +110,12 @@ def synthetic_ohlcv(
 
 
 # ---------------------------------------------------------------------------
-# Entry signal: RSI(14) + Bollinger(20, 2.5 sigma), parameterized exactly
-# like the round-2 crypto backtest indicators (Wilder RSI, BB on rolling
-# std). The signal confirms at bar t's close -> parent BUY order born at t.
+# Entry signal: Wilder-smoothed RSI(14) below 25 AND close below the lower
+# Bollinger band (20-bar mean, 2.5 x rolling std) — deep-oversold entries
+# only. Deliberately stricter than tools/crypto_backtest.py's standalone RSI
+# strategy (plain rolling-mean RSI, 30/70 crossings, 2.0-sigma bands): this
+# sandbox needs stressed-market parent orders, not parity with that tool.
+# The signal confirms at bar t's close -> parent BUY order born at t.
 # ---------------------------------------------------------------------------
 
 

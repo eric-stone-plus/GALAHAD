@@ -157,13 +157,69 @@ def test_get_daily_bars_anchors_explicit_start_window():
     out = client.get_daily_bars(["AAPL"], limit=250)
     qs = urllib.parse.parse_qs(urllib.parse.urlparse(seen["url"]).query)
     assert qs["timeframe"] == ["1Day"]
-    assert "limit" not in qs  # server-side limit truncates from the oldest bar
+    # explicit page size: the default page silently truncates to the oldest
+    # bars of the window (pagination covered by the multi-page test below)
+    assert qs["limit"] == [str(venue_alpaca._BARS_PAGE_SIZE)]
     assert qs["feed"] == ["iex"]
     start = date.fromisoformat(qs["start"][0])
     days = (date.today() - start).days
     assert 400 <= days <= 700
     assert len(out["AAPL"]) == 2
     assert out["AAPL"].iloc[-1]["close"] == 2.0
+
+
+def _bar(ts_day: str, close: float) -> dict:
+    return {"t": f"2026-09-{ts_day}T04:00:00Z", "o": 1.0, "h": 2.0, "l": 0.5, "c": close, "v": 100.0}
+
+
+def test_get_daily_bars_follows_next_page_token():
+    # Multi-page window: page 1 (oldest bars) + token -> page 2. The
+    # assembled window must hold the newest ``limit`` bars ACROSS pages —
+    # reading page 1 only would silently keep a stale window.
+    client = venue_alpaca._AlpacaPaperClient("k", "s")
+    pages = {
+        None: {
+            "bars": {"AAPL": [_bar("01", 1.0), _bar("02", 2.0)]},
+            "next_page_token": "p2",
+        },
+        "p2": {
+            "bars": {"AAPL": [_bar("03", 3.0), _bar("04", 4.0)]},
+            "next_page_token": None,
+        },
+    }
+    seen_tokens: list[str | None] = []
+
+    def fake_request(method: str, url: str):
+        token = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("page_token", [None])[0]
+        seen_tokens.append(token)
+        return pages[token]
+
+    client._request = fake_request
+    out = client.get_daily_bars(["AAPL"], limit=3)
+    assert seen_tokens == [None, "p2"]
+    assert [c for c in out["AAPL"]["close"]] == [2.0, 3.0, 4.0]
+    assert out["AAPL"].iloc[-1]["ts"] == "2026-09-04"
+
+
+def test_get_daily_bars_page_cap_fails_loud(monkeypatch):
+    # A venue that keeps handing out page tokens must not loop forever:
+    # bounded pages, then a hard error (never a silently truncated window).
+    monkeypatch.setattr(venue_alpaca, "_BARS_MAX_PAGES", 3)
+    client = venue_alpaca._AlpacaPaperClient("k", "s")
+    client._request = lambda method, url: {
+        "bars": {"AAPL": [_bar("04", 1.5)]},
+        "next_page_token": "never-ending",
+    }
+    with pytest.raises(RuntimeError, match="pagination"):
+        client.get_daily_bars(["AAPL"], limit=5)
+
+
+def test_get_daily_bars_rejects_limit_below_1():
+    # rows[-0:] would return the ENTIRE window — hard error at the boundary.
+    client = venue_alpaca._AlpacaPaperClient("k", "s")
+    for bad in (0, -5):
+        with pytest.raises(ValueError, match=">= 1"):
+            client.get_daily_bars(["AAPL"], limit=bad)
 
 
 def test_get_daily_bars_keeps_newest_limit_rows():
@@ -267,6 +323,20 @@ def test_reconcile_venue():
     assert unknown["position_mismatch"] is True  # fail closed
 
 
+# --- venue account equity: fail closed on a broken venue response -------------
+
+
+def test_venue_account_equity_missing_or_empty_raises():
+    for account in ({}, {"equity": None}, {"equity": ""}, {"equity": "   "}):
+        with pytest.raises(RuntimeError, match="equity"):
+            venue_alpaca._venue_account_equity(account, context="test")
+
+
+def test_venue_account_equity_numeric_zero_is_legitimate():
+    assert venue_alpaca._venue_account_equity({"equity": 0}, context="t") == 0.0
+    assert venue_alpaca._venue_account_equity({"equity": "0.00"}, context="t") == 0.0
+
+
 # --- one-shot venue session with fakes -------------------------------------------
 
 
@@ -309,16 +379,17 @@ def test_run_venue_once_summary_via_engine(monkeypatch, tmp_path):
     monkeypatch.setenv("ALPACA_PAPER_API_SECRET", "fake")
     client = FakeClient(apply_fills=True, fill_slippage_bps=3.0)
 
+    import galahad_security.engine as eng
     import galahad_security.venue_alpaca as va
 
-    orig = va._AlpacaPaperClient
-    va._AlpacaPaperClient = lambda *a, **k: client
-    try:
-        summary = run_paper_session(
-            config=_venue_cfg(), engine="alpaca_paper", output_dir=tmp_path
-        )
-    finally:
-        va._AlpacaPaperClient = orig
+    cfg = _venue_cfg()
+    # venue bars write through to {project_root}/data/cache — redirect the
+    # component root so the test does not touch the real data/ tree
+    monkeypatch.setattr(eng, "project_root", lambda: tmp_path)
+    monkeypatch.setattr(va, "_AlpacaPaperClient", lambda *a, **k: client)
+    summary = run_paper_session(
+        config=cfg, engine="alpaca_paper", output_dir=tmp_path / "out"
+    )
     assert summary["mode"] == "paper"
     assert summary["engine"] == "alpaca_paper"
     assert summary["venue"] == "ALPACA"
@@ -330,3 +401,40 @@ def test_run_venue_once_summary_via_engine(monkeypatch, tmp_path):
     # (fake venue prices are 4dp-rounded, so allow rounding tolerance)
     assert summary["tca"]["implementation_shortfall_bps"] == pytest.approx(3.0, abs=0.01)
     assert Path(summary["journal_path"]).is_file()
+
+
+def test_run_venue_once_via_engine_populates_bar_cache(monkeypatch, tmp_path):
+    """Docs contract: the shipped venue path write-caches fetched bars to
+    data/cache/{symbol}_1d.csv so later offline runs resolve the venue tier."""
+    monkeypatch.setenv("ALPACA_PAPER_API_KEY", "fake")
+    monkeypatch.setenv("ALPACA_PAPER_API_SECRET", "fake")
+    client = FakeClient(apply_fills=True)
+
+    import galahad_security.engine as eng
+    import galahad_security.venue_alpaca as va
+
+    cfg = _venue_cfg()
+    monkeypatch.setattr(eng, "project_root", lambda: tmp_path)
+    monkeypatch.setattr(va, "_AlpacaPaperClient", lambda *a, **k: client)
+    summary = run_paper_session(
+        config=cfg, engine="alpaca_paper", output_dir=tmp_path / "out"
+    )
+    for sym in summary["symbols"]:
+        cache = tmp_path / "data" / "cache" / f"{sym}_1d.csv"
+        assert cache.is_file(), f"venue cache not written for {sym}"
+        df = pd.read_csv(cache)
+        assert len(df) == 30  # FakeClient serves 30 rising bars
+
+
+def test_run_venue_once_missing_venue_equity_fails_closed(monkeypatch):
+    """A venue account response without a usable equity field is a broken
+    venue — raise, never fall back to the config default."""
+    monkeypatch.setenv("ALPACA_PAPER_API_KEY", "fake")
+    monkeypatch.setenv("ALPACA_PAPER_API_SECRET", "fake")
+
+    class NoEquityClient(FakeClient):
+        def get_account(self):
+            return {"cash": "100000.00"}
+
+    with pytest.raises(RuntimeError, match="equity"):
+        venue_alpaca.run_venue_once(_venue_cfg(), symbols=["AAPL"], client=NoEquityClient())

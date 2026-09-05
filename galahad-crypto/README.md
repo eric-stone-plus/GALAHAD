@@ -12,7 +12,7 @@ and [`docs/exchange-integration.md`](../docs/exchange-integration.md).
 
 | Path | What it is |
 |---|---|
-| `tools/crypto_backtest.py` | Strategy backtester (SMA cross, RSI, Bollinger, momentum). Multi-exchange-ready conventions (Binance/OKX via ccxt when wired to live data); ships a deterministic sample-data generator, so the default run is fully offline. Writes `data/backtest_summary.json`. |
+| `tools/crypto_backtest.py` | Strategy backtester (SMA cross, RSI, Bollinger). Multi-exchange-ready conventions (Binance/OKX via ccxt when wired to live data); ships a deterministic sample-data generator, so the default run is fully offline. Writes `data/backtest_summary.json`. |
 | `research/execution-rl/` | Execution-layer RL sandbox: given an already-decided parent order, can RL schedule execution over six 4h bars at lower implementation shortfall than execute-all-now / TWAP? Pre-registered verdict discipline; see its [README](research/execution-rl/README.md). |
 | `data/backtest_summary.json` | Recorded results of the shipped backtest round. |
 

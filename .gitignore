@@ -1,0 +1,6 @@
+# Repo-root backstop: secrets, local rehearsal/override configs, and local
+# virtualenvs must never be committed by any current or future component.
+# Component .gitignore files carry their own full rulesets.
+.env
+*.local.yaml
+.venv/

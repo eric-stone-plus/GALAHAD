@@ -229,12 +229,21 @@ class CashEquityBook:
         *,
         ts: str = "",
         note: str = "target",
+        equity: float | None = None,
     ) -> Fill | None:
-        """Rebalance position to a target weight of equity (long-only)."""
-        marks = {s: (mark if s == symbol else p.avg_cost) for s, p in self.positions.items()}
-        marks[symbol] = mark
+        """Rebalance position to a target weight of equity (long-only).
+
+        ``equity`` is the mark-to-market equity the risk gate approved the
+        weight against; callers that have it (the session engine) must pass
+        it. The fallback values other positions at avg_cost — fine for a
+        single-position book, stale otherwise.
+        """
+        if equity is None:
+            marks = {s: (mark if s == symbol else p.avg_cost) for s, p in self.positions.items()}
+            marks[symbol] = mark
+            equity = self.equity(marks)
         delta = self.target_weight_to_qty(
-            symbol, target_weight, mark, equity=self.equity(marks)
+            symbol, target_weight, mark, equity=equity
         )
         if abs(delta) < 1.0:  # sub-share dust
             return None

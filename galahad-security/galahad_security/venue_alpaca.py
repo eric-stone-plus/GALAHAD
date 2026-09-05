@@ -52,6 +52,11 @@ DATA_BASE_URL = "https://data.alpaca.markets"
 API_KEY_ENV = "ALPACA_PAPER_API_KEY"
 API_SECRET_ENV = "ALPACA_PAPER_API_SECRET"
 _HTTP_TIMEOUT_SEC = 15.0
+# Bars pagination: the endpoint's default page (~1000 bars) silently
+# truncates the window to its OLDEST page, so pass an explicit page size
+# and follow next_page_token until the window is complete (bounded).
+_BARS_PAGE_SIZE = 10_000
+_BARS_MAX_PAGES = 50
 
 
 # --- pure helpers (no network) ----------------------------------------------
@@ -150,6 +155,23 @@ def reconcile_venue(
     }
 
 
+def _venue_account_equity(account: Mapping[str, Any], *, context: str) -> float:
+    """Venue-reported account equity; hard error on a missing/empty field.
+
+    ``account.get("equity") or <default>`` would mask a broken venue
+    response exactly where reconciliation is the tripwire. A legitimate
+    numeric zero (``0`` / ``"0.00"``) is a valid equity and passes.
+    """
+    raw = account.get("equity")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raise RuntimeError(
+            f"alpaca_paper: venue account {context} has no usable 'equity' "
+            f"field (got {raw!r}) — fail closed, never fall back to config "
+            "defaults for venue-reported state"
+        )
+    return float(raw)
+
+
 # --- HTTP boundary (lazy; the only network code in the component) ------------
 
 
@@ -225,27 +247,45 @@ class _AlpacaPaperClient:
     def get_daily_bars(self, symbols: list[str], *, limit: int) -> dict[str, pd.DataFrame]:
         # The bars endpoint without ``start`` returns only the current-day bar,
         # so anchor an explicit window wide enough to hold ``limit`` trading
-        # days (~252/yr, 1.5x safety). ``limit`` in the query truncates from
-        # the OLDEST bar of the window, so omit it and keep the newest
-        # ``limit`` rows client-side. Multi-symbol requests silently drop
-        # symbols on some plans, so fetch one symbol per request.
+        # days (~252/yr, 1.5x safety). Pages come back oldest-first, so an
+        # explicit page size + next_page_token loop assembles the FULL window
+        # (the default page would silently truncate to the oldest bars) and
+        # the newest ``limit`` rows are kept client-side. Multi-symbol
+        # requests silently drop symbols on some plans, so fetch one symbol
+        # per request.
+        if int(limit) < 1:
+            raise ValueError(f"alpaca_paper: bar limit must be >= 1 (got {limit!r})")
         window_days = int(limit * 365 / 252 * 1.5) + 10
         start = (date.today() - timedelta(days=window_days)).isoformat()
         out: dict[str, pd.DataFrame] = {}
         for symbol in symbols:
-            query = urllib.parse.urlencode(
-                {
+            rows: list[dict[str, Any]] = []
+            page_token: str | None = None
+            for _ in range(_BARS_MAX_PAGES):
+                params = {
                     "symbols": symbol,
                     "timeframe": "1Day",
                     "start": start,
                     "feed": "iex",
                     # v1 models no corporate actions — raw prices, documented.
                     "adjustment": "raw",
+                    "limit": _BARS_PAGE_SIZE,
                 }
-            )
-            payload = self._request("GET", f"{self.data_url}/v2/stocks/bars?{query}")
-            bars = payload.get("bars") or {}
-            rows = bars.get(symbol) or []
+                if page_token:
+                    params["page_token"] = page_token
+                query = urllib.parse.urlencode(params)
+                payload = self._request("GET", f"{self.data_url}/v2/stocks/bars?{query}")
+                bars = payload.get("bars") or {}
+                rows.extend(bars.get(symbol) or [])
+                page_token = payload.get("next_page_token")
+                if not page_token:
+                    break
+            else:
+                raise RuntimeError(
+                    f"alpaca_paper: bars pagination for {symbol} exceeded "
+                    f"{_BARS_MAX_PAGES} pages (page size {_BARS_PAGE_SIZE}) — "
+                    "fail closed rather than trade on a truncated window"
+                )
             if not rows:
                 raise RuntimeError(
                     f"alpaca_paper: no daily bars returned for {symbol} "
@@ -307,7 +347,7 @@ def run_venue_once(
             save_cache(cache_path_for(project_root, sym), df)
 
     account = client.get_account()
-    equity = float(account.get("equity") or cfg.get("initial_equity", 100_000))
+    equity = _venue_account_equity(account, context="before the session")
     venue_qty_before = {
         p["symbol"]: int(float(p["qty"])) for p in (client.get_positions() or [])
     }
@@ -386,7 +426,7 @@ def run_venue_once(
         else None
     )
     account_after = client.get_account()
-    final_equity = float(account_after.get("equity") or equity)
+    final_equity = _venue_account_equity(account_after, context="after the session")
 
     positions = {
         p["symbol"]: {

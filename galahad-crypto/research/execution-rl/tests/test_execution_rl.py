@@ -18,7 +18,7 @@ from execution_env import (
     run_episode,
     synthetic_ohlcv,
 )
-from train_eval import run_experiment, train_q, make_greedy_policy
+from train_eval import run_experiment, train_q, make_greedy_policy, q_shape
 
 
 def _trend_df(prices, vol=1000.0):
@@ -64,6 +64,20 @@ def test_train_q_determinism():
     q1 = train_q(envs, [entries], gamma=0.5, lr=0.2, episodes=60, seed=99)
     q2 = train_q(envs, [entries], gamma=0.5, lr=0.2, episodes=60, seed=99)
     np.testing.assert_array_equal(q1, q2)
+
+
+def test_q_shape_follows_execution_config():
+    # The Q-table shape derives from ExecutionConfig knobs; changed knobs
+    # must reshape the table, not crash training with an IndexError.
+    assert q_shape(ExecutionConfig()) == (6, 5, 3, 3, len(ACTIONS))
+    df = synthetic_ohlcv(seed=5, n_bars=500)
+    cfg = ExecutionConfig(n_bars=4, n_vol_buckets=2, n_trend_buckets=4)
+    disc = StateDiscretizer(cfg).fit(df.iloc[:350])
+    entries = np.arange(30, 340, 20)
+    entries = entries[entries + cfg.n_bars < len(df)]  # complete windows only
+    envs = [ExecutionEnv(df, cfg, disc)]
+    q = train_q(envs, [entries], gamma=0.5, lr=0.2, episodes=40, seed=7)
+    assert q.shape == (4, 5, 2, 4, len(ACTIONS))
 
 
 # ---------------------------------------------------------------------------

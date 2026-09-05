@@ -136,3 +136,29 @@ def test_fixture_regeneration_is_deterministic(tmp_path):
     a, _, _ = load_bars(source="fixture", project_root=tmp_path, symbols=["AAPL"], limit=250)
     b, _, _ = load_bars(source="fixture", project_root=tmp_path, symbols=["AAPL"], limit=250)
     pd.testing.assert_frame_equal(a["AAPL"], b["AAPL"])
+
+
+def test_load_bars_rejects_limit_below_1(tmp_path):
+    # df.iloc[-0:] would return the ENTIRE frame — hard error at the boundary.
+    for bad in (0, -3):
+        with pytest.raises(ValueError, match=">= 1"):
+            load_bars(source="fixture", project_root=tmp_path, symbols=["AAPL"], limit=bad)
+
+
+def test_engine_passes_mark_to_market_equity_to_book(monkeypatch, tmp_path):
+    """Wiring: apply_target_weight must receive the bar's pre-trade MTM
+    equity (what the gate approved against), never the avg-cost fallback."""
+    from galahad_security.book import CashEquityBook
+
+    seen: list[float | None] = []
+    orig = CashEquityBook.apply_target_weight
+
+    def spy(self, symbol, target_weight, mark, *, ts="", note="target", equity=None):
+        seen.append(equity)
+        return orig(self, symbol, target_weight, mark, ts=ts, note=note, equity=equity)
+
+    monkeypatch.setattr(CashEquityBook, "apply_target_weight", spy)
+    summary = run_paper_session(force_source="fixture", output_dir=tmp_path)
+    assert summary["n_fills"] >= 1
+    assert seen, "apply_target_weight never called"
+    assert all(e is not None and e > 0 for e in seen)

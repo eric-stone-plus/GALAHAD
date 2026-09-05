@@ -4,7 +4,7 @@ Crypto backtesting framework.
 Multi-exchange ready (Binance + OKX conventions via ccxt when fetching
 live data; ships with a deterministic sample-data generator for offline
 runs).
-Strategies: SMA cross / RSI / Bollinger / momentum.
+Strategies: SMA cross / RSI / Bollinger.
 
 Backtest-only tool: it never places orders.
 """
@@ -33,8 +33,6 @@ class TradeConfig:
     end_date: str = "2026-06-15"
     initial_capital: float = 10000  # USDT
     position_size: float = 0.1     # 10% per trade
-    stop_loss_pct: float = 0.02    # 2% stop loss
-    take_profit_pct: float = 0.04  # 4% take profit
     fee_rate: float = 0.001        # 0.1% fee
 
 
@@ -264,7 +262,46 @@ def strategy_bollinger(df: pd.DataFrame, config: TradeConfig) -> list:
     return trades
 
 
-def calculate_metrics(trades: list, config: TradeConfig) -> BacktestResult:
+def _bar_sharpe(trades: list, config: TradeConfig, df: pd.DataFrame) -> float:
+    """Annualized Sharpe ratio from per-bar mark-to-market equity returns.
+
+    Equity sits in cash between trades and is marked to the bar close while
+    a position is open; each trade's fee is charged half at entry, half at
+    exit. Annualization = sqrt(bars per year) for the configured timeframe
+    (risk-free rate 0). Zero when fewer than two returns or zero variance.
+    """
+    if not trades or df.empty:
+        return 0.0
+    periods_per_year = {"1h": 24 * 365, "1d": 365}.get(config.timeframe, 365)
+    entries = {pd.Timestamp(t.entry_time): t for t in trades}
+    exits = {pd.Timestamp(t.exit_time): t for t in trades}
+    equity = float(config.initial_capital)
+    cash, qty = equity, 0.0
+    open_trade = None
+    prev = equity
+    rets = []
+    for i, row in enumerate(df.itertuples()):
+        bar_ts = pd.Timestamp(row.timestamp)
+        if open_trade is None and bar_ts in entries:
+            open_trade = entries[bar_ts]
+            qty = float(open_trade.quantity)
+            cash = equity - qty * float(open_trade.entry_price) - float(open_trade.fee) / 2.0
+        if open_trade is not None and bar_ts in exits:
+            equity = cash + qty * float(open_trade.exit_price) - float(open_trade.fee) / 2.0
+            cash, qty, open_trade = equity, 0.0, None
+        elif open_trade is not None:
+            equity = cash + qty * float(row.close)
+        if i > 0:
+            rets.append(equity / prev - 1.0)
+        prev = equity
+    r = np.asarray(rets, dtype=float)
+    std = r.std(ddof=1) if len(r) >= 2 else 0.0
+    if std <= 0:
+        return 0.0
+    return float(r.mean() / std * np.sqrt(periods_per_year))
+
+
+def calculate_metrics(trades: list, config: TradeConfig, df: pd.DataFrame) -> BacktestResult:
     """Compute backtest metrics."""
     result = BacktestResult(
         strategy=",".join(set(t.strategy for t in trades)),
@@ -317,6 +354,8 @@ def calculate_metrics(trades: list, config: TradeConfig) -> BacktestResult:
         if dd > max_dd:
             max_dd = dd
     result.max_drawdown_pct = max_dd * 100
+
+    result.sharpe_ratio = _bar_sharpe(trades, config, df)
 
     return result
 
@@ -372,7 +411,7 @@ def run_backtest():
     for name, strategy_fn in strategies:
         print(f"Running strategy: {name}")
         trades = strategy_fn(df, config)
-        result = calculate_metrics(trades, config)
+        result = calculate_metrics(trades, config, df)
         all_results.append(result)
         print(format_backtest_report(result))
         print()
@@ -387,6 +426,7 @@ def run_backtest():
             "strategy": r.strategy,
             "total_return_pct": r.total_return_pct,
             "max_drawdown_pct": r.max_drawdown_pct,
+            "sharpe_ratio": r.sharpe_ratio,
             "win_rate": r.win_rate,
             "total_trades": r.total_trades,
             "profit_factor": r.profit_factor,

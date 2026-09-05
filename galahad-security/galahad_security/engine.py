@@ -148,6 +148,7 @@ def run_paper_on_bars(
                     mark,
                     ts=ts,
                     note=f"{name}:{decision.reason}",
+                    equity=pre_eq,  # the MTM equity the gate approved against
                 )
         book.mark_to_market(marks, ts=ts)
         session.update_equity(book.equity(marks), ts=ts)
@@ -243,6 +244,7 @@ def run_paper_session(
             symbols=symbols,
             strategy_name=force_strategy,
             bar_limit=bar_limit,
+            project_root=root,  # venue bars write through to data/cache/
         )
         engine_tag, engine_ver = VENUE_ENGINE_NAME, VENUE_ENGINE_VERSION
         source_used, sample_kind, data_note = "venue", "venue", None

@@ -149,6 +149,8 @@ def load_bars(
     """
     root = Path(project_root)
     source = str(source or "auto").lower()
+    if int(limit) < 1:
+        raise ValueError(f"bar limit must be >= 1 (got {limit!r})")
     if source == "venue":
         raise RuntimeError(
             "data source 'venue' is fetch-on-venue-engine only: use "

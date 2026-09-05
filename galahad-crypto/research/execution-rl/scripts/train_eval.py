@@ -36,6 +36,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from execution_env import (  # noqa: E402
     ACTIONS,
+    REMAINING_EDGES,
     ExecutionConfig,
     ExecutionEnv,
     StateDiscretizer,
@@ -107,7 +108,16 @@ def load_market_data(
 # ---------------------------------------------------------------------------
 
 # Q index: (bars_remaining-1, rem_bucket, vol_bucket, trend_bucket, action)
-Q_SHAPE = (6, 5, 3, 3, len(ACTIONS))
+def q_shape(cfg: ExecutionConfig) -> tuple[int, int, int, int, int]:
+    """Q-table shape derived from the config knobs — hardcoding these turns a
+    changed n_bars/bucket count into an opaque IndexError mid-training."""
+    return (
+        cfg.n_bars,
+        len(REMAINING_EDGES) + 1,
+        cfg.n_vol_buckets,
+        cfg.n_trend_buckets,
+        len(ACTIONS),
+    )
 
 
 def _greedy_action(q_sa: np.ndarray, rng: np.random.Generator) -> int:
@@ -132,7 +142,7 @@ def train_q(
     """Train tabular Q with epsilon-greedy on the merged multi-symbol
     training entry pool."""
     rng = np.random.default_rng(seed)
-    q = np.zeros(Q_SHAPE)
+    q = np.zeros(q_shape(envs[0].cfg))
     pool = [(si, int(t)) for si, ent in enumerate(train_entries) for t in ent]
     if not pool:
         raise ValueError("training entry pool is empty")

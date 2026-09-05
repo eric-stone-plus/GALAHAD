@@ -4,8 +4,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+
+# Symbols land in data/fixtures|cache file paths — strict allowlist at the
+# CLI boundary so a crafted value can never traverse the filesystem.
+_SYMBOL_RE = re.compile(r"^[A-Z0-9.\-]+$")
+
+
+def _parse_symbols(raw: str) -> list[str]:
+    symbols = [s.strip().upper() for s in raw.split(",") if s.strip()]
+    bad = [s for s in symbols if not _SYMBOL_RE.fullmatch(s)]
+    if bad:
+        raise ValueError(
+            f"invalid symbol(s) {bad}: symbols must match {_SYMBOL_RE.pattern} "
+            "(uppercase letters, digits, '.', '-')"
+        )
+    return symbols
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -45,12 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="print summary JSON only")
     args = ap.parse_args(argv)
 
-    force_symbols = (
-        [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-        if args.symbols
-        else None
-    )
     try:
+        force_symbols = _parse_symbols(args.symbols) if args.symbols else None
         summary = run_paper_session(
             config_path=args.config,
             force_source=args.source,
@@ -59,9 +71,12 @@ def main(argv: list[str] | None = None) -> int:
             force_symbols=force_symbols,
             engine=args.engine,
         )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         # Fail closed with a clean operator-facing error (no traceback dump):
-        # missing venue credentials, closed venue gate, venue transport errors.
+        # missing venue credentials, closed venue gate, venue transport
+        # errors (RuntimeError); malformed config — bad derisk_ladder,
+        # invalid costs.*, unknown engine/strategy — and rejected symbols
+        # (ValueError).
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:

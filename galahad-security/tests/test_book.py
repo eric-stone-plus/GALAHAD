@@ -83,6 +83,26 @@ def test_apply_target_weight_rebalance():
     assert book.position("AAPL").qty == 0
 
 
+def test_apply_target_weight_sizes_against_gate_mtm_equity():
+    # The gate approves a weight against mark-to-market equity; the book must
+    # size against that same number. Numeric corner: 500 MSFT @ avg_cost 100
+    # marked at 80 → MTM equity 90k, so an approved 0.25 weight = $22.5k =
+    # 450 shares at 50 — avg_cost accounting (100k) would overbuy 500 ($25k).
+    book = _book()
+    book.market_order("MSFT", 500, 100.0, ts="t0")
+    mtm = book.equity({"MSFT": 80.0})
+    assert mtm == pytest.approx(90_000.0)
+    fill = book.apply_target_weight("AAPL", 0.25, 50.0, ts="t1", equity=mtm)
+    assert fill is not None and fill.qty == 450
+    assert book.cash == pytest.approx(50_000.0 - 450 * 50.0)
+    # Without the gate's MTM equity the fallback values other positions at
+    # avg_cost (documented for single-position callers) → the stale 500.
+    book2 = _book()
+    book2.market_order("MSFT", 500, 100.0, ts="t0")
+    stale = book2.apply_target_weight("AAPL", 0.25, 50.0, ts="t1")
+    assert stale is not None and stale.qty == 500
+
+
 def test_cost_model_hand_computed():
     book = _book(spread_bps=2.0, impact_bps=4.0)
     buy = book.market_order("AAPL", 10, 100.0, ts="t0")
