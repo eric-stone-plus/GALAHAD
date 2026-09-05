@@ -85,3 +85,21 @@ def test_json_error_path_restores_stdout(monkeypatch, capfd):
     # stdout restored after the error path: later prints land on stdout.
     print("post-restore")
     assert "post-restore" in capfd.readouterr().out
+
+
+def test_config_valueerror_is_clean_exit2_not_traceback(monkeypatch, capfd):
+    """Config-validation ValueErrors get the same clean refusal RuntimeError
+    gets (bad max_minutes, malformed ladder, bad rest_url, ...)."""
+    def bad_config(**kwargs):
+        raise ValueError("testnet.max_minutes must be a positive number (got 0.0)")
+
+    monkeypatch.setattr("galahad_futures.engine.run_paper_session", bad_config)
+    rc = cli.main(["--source", "fixture", "--json"])
+    out, err = capfd.readouterr()
+    assert rc == 2
+    assert out == ""
+    assert "error: testnet.max_minutes must be a positive number" in err
+    assert "Traceback" not in err
+    # stdout restored after the error path as well.
+    print("post-restore")
+    assert "post-restore" in capfd.readouterr().out

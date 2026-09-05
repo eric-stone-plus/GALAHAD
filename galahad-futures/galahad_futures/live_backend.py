@@ -195,6 +195,39 @@ def infer_external_flatten(
     )
 
 
+def resolve_live_equity(
+    venue_equity: float | None, last_good_equity: float | None
+) -> float | None:
+    """Fail-closed equity resolution for a live bar.
+
+    The venue reading wins; on outage fall back to the last known-good
+    venue reading — never the session peak (peak as current equity masks
+    drawdown, blocks invalidation, and can clear an active LOSS_HALTED
+    mid-outage). ``None`` means no trustworthy snapshot exists yet:
+    decide nothing, submit nothing.
+    """
+    if venue_equity is not None:
+        return float(venue_equity)
+    return last_good_equity
+
+
+def external_flatten_confirmed(
+    streak: int,
+    *,
+    observed_flat: bool,
+    required: int = 2,
+) -> tuple[int, bool]:
+    """Streak gate for the external-flatten heuristic.
+
+    A venue fill/user-stream update can lag one bar past submission, so a
+    single quiet-bar flat reading false-trips the heuristic. It only fires
+    after ``required`` consecutive quiet-bar observations. Returns the new
+    streak and whether the observation is confirmed.
+    """
+    new_streak = int(streak) + 1 if observed_flat else 0
+    return new_streak, new_streak >= int(required)
+
+
 def reconcile_execution(
     *,
     orders_submitted: int,
@@ -481,6 +514,13 @@ def _run_node(
             self.equity_curve: list[dict[str, Any]] = []
             self.account_curve: list[dict[str, Any]] = []
             self.bars_seen = 0
+            # Last known-good venue equity reading; the outage fallback
+            # (never the session peak — see resolve_live_equity).
+            self._last_good_equity: float | None = None
+            # Consecutive quiet-bar external-flatten observations; the
+            # heuristic fires only once the streak confirms (stale-flat
+            # venue reads lagging one bar past submission false-trip it).
+            self._quiet_flat_streak = 0
             # Arrival price (decision bar close) of the most recently
             # submitted order — one order per bar, fills arrive before the
             # next bar, so a single slot suffices for the TCA record.
@@ -610,9 +650,16 @@ def _run_node(
                 self.session = SessionRisk.from_config(cfg, start_equity=self.initial_equity)
             session = self.session
 
-            pre_eq = self._venue_equity()
+            pre_eq = resolve_live_equity(self._venue_equity(), self._last_good_equity)
             if pre_eq is None:
-                pre_eq = session.gate.peak_equity or self.initial_equity
+                # No trustworthy equity snapshot yet this session: fail
+                # closed — no state transitions, no decisions, no order
+                # submissions. A venue-reported liquidation still halts.
+                if self.liquidated_events:
+                    session.note_liquidation(ts=ts_iso)
+                    self.halted = True
+                return
+            self._last_good_equity = pre_eq
             session.update_equity(pre_eq, ts=ts_iso)
 
             targets = strategy.targets(pd.DataFrame(self._rows))
@@ -673,25 +720,35 @@ def _run_node(
             # The fill events for an order submitted on this bar arrive
             # asynchronously AFTER this callback returns; running the
             # flatten inference on the submission bar itself races and
-            # reads as a false liquidation. Only infer on quiet bars.
-            if (
-                venue_qty_after is not None
-                and self.submitted == submitted_before
-                and infer_external_flatten(
-                    expected_qty=self.expected_qty,
-                    venue_qty=venue_qty_after,
-                    open_orders=self._open_orders(),
-                )
-            ):
+            # reads as a false liquidation. Only infer on quiet bars — and
+            # even there a fill/user-stream update can lag one bar past
+            # submission, so a single quiet-bar flat reading is not enough:
+            # the streak gate requires consecutive observations.
+            self._quiet_flat_streak, confirmed_flat = external_flatten_confirmed(
+                self._quiet_flat_streak,
+                observed_flat=(
+                    venue_qty_after is not None
+                    and self.submitted == submitted_before
+                    and infer_external_flatten(
+                        expected_qty=self.expected_qty,
+                        venue_qty=venue_qty_after,
+                        open_orders=self._open_orders(),
+                    )
+                ),
+            )
+            if confirmed_flat:
                 self.liquidated_events.append({"ts": ts_iso, "detector": "external_flatten"})
             if self.liquidated_events:
                 session.note_liquidation(ts=ts_iso)
                 self.halted = True
 
-            eq = self._venue_equity()
-            self.equity_curve.append({"ts": ts_iso, "equity": eq if eq is not None else pre_eq})
+            # pre_eq is non-None past the outage guard above, so post_eq
+            # always carries a real equity number into the curves.
+            post_eq = resolve_live_equity(self._venue_equity(), pre_eq)
+            self._last_good_equity = post_eq
+            self.equity_curve.append({"ts": ts_iso, "equity": post_eq})
             self.account_curve.append({"ts": ts_iso, "equity": pre_eq})
-            session.update_equity(eq if eq is not None else pre_eq, ts=ts_iso)
+            session.update_equity(post_eq, ts=ts_iso)
 
     url_overrides = testnet_url_overrides(cfg)
     # Load exactly the session instrument into the cache (the provider's
@@ -732,8 +789,14 @@ def _run_node(
         timeout_disconnection=10.0,
     )
     # Structural guarantee: mainnet can never be constructed by this backend.
+    # Explicit raise, not assert: the guarantee must survive `python -O`.
     for client_cfg in (*node_config.data_clients.values(), *node_config.exec_clients.values()):
-        assert client_cfg.environment is BinanceEnvironment.TESTNET
+        if client_cfg.environment is not BinanceEnvironment.TESTNET:
+            raise RuntimeError(
+                "engine=nautilus_live: internal invariant violated — a client "
+                "was configured outside BinanceEnvironment.TESTNET; aborting "
+                "before node construction"
+            )
 
     node = TradingNode(config=node_config)
     node.add_data_client_factory(VENUE, BinanceLiveDataClientFactory)
@@ -752,13 +815,26 @@ def _run_node(
         name="galahad-testnet-node",
     )
     runner.start()
+    runner_died_early = False
     try:
         deadline = started + max_minutes * 60.0
         while runner.is_alive() and time.monotonic() < deadline:
             if strategy_obj.halted:
                 break
             time.sleep(0.5)
+        # A runner that died before the deadline without a risk halt means
+        # the strategy/node thread crashed (raise_exception=True); the
+        # session must not be reported as a clean run.
+        runner_died_early = (
+            not runner.is_alive()
+            and time.monotonic() < deadline
+            and not strategy_obj.halted
+        )
     finally:
+        # Halt new submissions before the stop is scheduled: until node.stop
+        # actually runs, bars keep arriving on the daemon node and the
+        # strategy would otherwise keep evaluating and submitting.
+        strategy_obj.halted = True
         try:
             node.kernel.loop.call_soon_threadsafe(node.stop)
         except Exception:
@@ -775,6 +851,18 @@ def _run_node(
             "engine=nautilus_live: trading node exited before the strategy started "
             "(connection or authentication failure — check testnet credentials and "
             "network reachability); no summary was produced"
+        )
+
+    if runner_died_early:
+        try:
+            node.dispose()
+        except Exception:
+            pass
+        raise RuntimeError(
+            "engine=nautilus_live: trading node thread died mid-session before "
+            "the deadline without a risk halt (unhandled exception in the "
+            "strategy/node thread — see the thread traceback on stderr); "
+            "refusing to report a clean session result"
         )
 
     session = strategy_obj.session or SessionRisk.from_config(
@@ -847,4 +935,8 @@ def _money_float(value: object) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
-        return float(str(value).split()[0])
+        pass
+    parts = str(value).split()
+    if not parts:
+        raise ValueError(f"unparseable money value: {value!r}")
+    return float(parts[0])

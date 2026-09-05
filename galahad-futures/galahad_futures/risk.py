@@ -49,7 +49,8 @@ class RiskConfig:
     enable_testnet: bool = False  # testnet passes only when True + kill_switch off
     mode: str = "paper"  # paper | testnet | live
     # Graduated de-risking: [{drawdown: frac, leverage_multiplier: 0..1}, ...]
-    # ascending in drawdown. Empty = OFF. Normalized by RiskGate to a tuple
+    # ascending in drawdown, non-increasing in multiplier (a deeper rung may
+    # never re-leverage). Empty = OFF. Normalized by RiskGate to a tuple
     # of (drawdown, multiplier) pairs; malformed config raises ValueError.
     derisk_ladder: Any = None
 
@@ -58,7 +59,8 @@ def validate_derisk_ladder(ladder: Any) -> tuple[tuple[float, float], ...]:
     """Fail-closed ladder config validation; returns normalized tier pairs.
 
     Hard ``ValueError`` on: wrong container type, missing/non-numeric keys,
-    drawdowns outside (0, 1] or non-ascending, multipliers outside [0, 1].
+    drawdowns outside (0, 1] or non-ascending, multipliers outside [0, 1]
+    or increasing with depth.
     """
     if ladder is None or ladder == () or ladder == []:
         return ()
@@ -68,6 +70,7 @@ def validate_derisk_ladder(ladder: Any) -> tuple[tuple[float, float], ...]:
         )
     out: list[tuple[float, float]] = []
     prev_dd = 0.0
+    prev_mult = 1.0
     for i, tier in enumerate(ladder):
         if isinstance(tier, dict):
             raw_dd, raw_mult = tier.get("drawdown"), tier.get("leverage_multiplier")
@@ -98,7 +101,14 @@ def validate_derisk_ladder(ladder: Any) -> tuple[tuple[float, float], ...]:
                 f"risk.derisk_ladder must be strictly ascending in drawdown "
                 f"(tier {i}: {dd} after {prev_dd})"
             )
+        if mult > prev_mult + 1e-12:
+            raise ValueError(
+                f"risk.derisk_ladder must be non-increasing in "
+                f"leverage_multiplier as drawdown deepens "
+                f"(tier {i}: {mult} after {prev_mult})"
+            )
         prev_dd = dd
+        prev_mult = mult
         out.append((dd, mult))
     return tuple(out)
 

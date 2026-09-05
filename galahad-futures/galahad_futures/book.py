@@ -384,6 +384,9 @@ class FuturesPaperBook:
 
             total_qty = close_qty + opened
             total_fee = close_fee + open_fee
+            # Residual open may be margin-capped: split costs on executed qty.
+            if total_qty < fill_qty:
+                spread_cost, impact_cost = self._cost_split(total_qty, price)
             side = "BUY" if qty > 0 else "SELL"
             fill = Fill(
                 ts=ts,

@@ -197,3 +197,32 @@ def test_flip_fees_charged_once_per_leg():
     assert book.position("BTCUSDT").qty == pytest.approx(-1.0)
     total_fees = sum(f.fee for f in book.fills)
     assert total_fees == pytest.approx(3.0)
+
+
+def test_flip_cost_split_recomputed_when_residual_open_is_margin_capped():
+    """Capped flip: the recorded spread/impact split covers the executed qty
+    (close + capped open), not the requested order qty — mirroring the
+    same-side branch's post-cap recompute."""
+    book = FuturesPaperBook(
+        wallet=100.0,
+        fee_bps=0.0,
+        spread_bps=10.0,
+        impact_bps=10.0,
+        default_leverage=2.0,
+        max_leverage=5.0,
+    )
+    book.set_leverage("BTCUSDT", 2.0)
+    f1 = book.market_order("BTCUSDT", 0.5, 100.0, ts="t0")
+    assert f1 is not None
+
+    f2 = book.market_order("BTCUSDT", -3.0, 100.0, ts="t1")
+    assert f2 is not None
+    # The residual short open was margin-capped: executed qty < requested.
+    assert f2.qty < 3.0 - 1e-9
+    assert book.position("BTCUSDT").qty == pytest.approx(-(f2.qty - 0.5))
+    # Split is priced on the arrival, on executed qty only.
+    assert f2.spread_cost == pytest.approx(f2.qty * 100.0 * (10.0 / 2.0) / 10_000.0)
+    assert f2.impact_cost == pytest.approx(f2.qty * 100.0 * 10.0 / 10_000.0)
+    # Regression guard: pre-fix values were computed on the full 3.0 requested.
+    assert f2.spread_cost < 3.0 * 100.0 * (10.0 / 2.0) / 10_000.0
+    assert f2.impact_cost < 3.0 * 100.0 * 10.0 / 10_000.0

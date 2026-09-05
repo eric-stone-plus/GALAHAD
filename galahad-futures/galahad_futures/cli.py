@@ -74,9 +74,11 @@ def main(argv: list[str] | None = None) -> int:
             force_lookback=args.lookback,
             engine=args.engine,
         )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         # Fail closed with a clean operator-facing error (no traceback dump):
-        # missing optional deps, missing testnet credentials, closed gate.
+        # missing optional deps, missing testnet credentials, a closed gate,
+        # and config-validation errors (bad testnet.max_minutes / rest_url /
+        # ws_url, malformed derisk_ladder, unknown engine name).
         print(f"error: {exc}", file=sys.stderr)
         return 2
     finally:

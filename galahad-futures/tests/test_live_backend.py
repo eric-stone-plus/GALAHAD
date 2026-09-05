@@ -14,12 +14,19 @@ import json
 import os
 import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
+import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import run_shadow
 
 from galahad_futures import live_backend
 from galahad_futures.decision import SessionRisk
@@ -569,3 +576,489 @@ def test_live_result_rejection_fields_default_and_passthrough():
     cfg = {**load_config(), "mode": "testnet"}
     assert _fake_live_result(cfg)["orders_rejected"] == 0
     assert _fake_live_result(cfg)["dust_skips"] == 0
+
+
+# --- equity-outage resolution (fail-closed, never the session peak) ----------
+
+
+def test_resolve_live_equity_prefers_venue_then_last_good():
+    assert live_backend.resolve_live_equity(10_100.0, 9_900.0) == 10_100.0
+    # outage with a prior good reading: last-known-good, never peak
+    assert live_backend.resolve_live_equity(None, 9_900.0) == 9_900.0
+    # outage from session start: no trustworthy snapshot → None (fail closed)
+    assert live_backend.resolve_live_equity(None, None) is None
+
+
+def test_outage_last_good_fallback_keeps_loss_halt_engaged():
+    """Regression: feeding peak_equity as CURRENT equity during a venue
+    outage cleared an active LOSS_HALTED and re-enabled submissions."""
+    gate = RiskGate(
+        config=RiskConfig(mode="testnet", max_daily_loss=500.0),
+        day_start_equity=10_000.0,
+    )
+    gate.update_equity(10_000.0, ts="t0")  # peak; daily-loss floor = 9_500
+    gate.update_equity(9_400.0, ts="t1")  # below floor → LOSS_HALTED
+    assert gate.loss_halted
+    # Venue unreadable; last known good is 9_400 → the halt must persist.
+    gate.update_equity(live_backend.resolve_live_equity(None, 9_400.0), ts="t2")
+    assert gate.loss_halted
+    assert gate.max_drawdown_seen == pytest.approx(0.06)
+
+
+# --- external-flatten streak gate ----------------------------------------------
+
+
+def test_external_flatten_requires_consecutive_quiet_bars():
+    streak, confirmed = live_backend.external_flatten_confirmed(0, observed_flat=True)
+    assert (streak, confirmed) == (1, False)  # single observation never fires
+    streak, confirmed = live_backend.external_flatten_confirmed(streak, observed_flat=True)
+    assert (streak, confirmed) == (2, True)  # second consecutive → confirmed
+    # submission bar / venue not flat / working orders → streak resets
+    streak, confirmed = live_backend.external_flatten_confirmed(2, observed_flat=False)
+    assert (streak, confirmed) == (0, False)
+    streak, confirmed = live_backend.external_flatten_confirmed(streak, observed_flat=True)
+    assert (streak, confirmed) == (1, False)  # back to one observation
+
+
+# --- _money_float ----------------------------------------------------------------
+
+
+def test_money_float_parses_moneyish_values():
+    assert live_backend._money_float(None) == 0.0
+    assert live_backend._money_float(0.005) == pytest.approx(0.005)
+    assert live_backend._money_float("0.005 USDT") == pytest.approx(0.005)
+
+
+def test_money_float_unparseable_raises_valueerror_not_indexerror():
+    with pytest.raises(ValueError, match="unparseable money value"):
+        live_backend._money_float("")
+    with pytest.raises(ValueError, match="unparseable money value"):
+        live_backend._money_float("   ")
+    with pytest.raises(ValueError):
+        live_backend._money_float("USDT")
+
+
+# --- _run_node session driver via a fake nautilus_trader stack ------------------
+#
+# nautilus_trader is an optional dependency (not installed in CI). These tests
+# fake exactly the import surface _run_node touches, so the session driver
+# (equity-outage handling, flatten streak, crash detection, shutdown order)
+# is exercised offline.
+
+
+class _FakeQuantity:
+    def __init__(self, value, precision):
+        self.value = float(value)
+        self.precision = precision
+
+
+class _FakeAccount:
+    def __init__(self, equity):
+        self._equity = equity
+
+    def balance_total(self, currency):
+        return self._equity
+
+    def leverage(self, instrument_id):
+        return 3.0
+
+
+class _FakePortfolio:
+    """Venue state knob: ``equity = None`` simulates an account-read outage."""
+
+    def __init__(self):
+        self.equity: float | None = 10_000.0
+        self.qty = 0.0
+
+    def net_position(self, instrument_id):
+        return self.qty
+
+    def account(self, venue):
+        return None if self.equity is None else _FakeAccount(self.equity)
+
+    def unrealized_pnl(self, instrument_id):
+        return 0.0
+
+
+class _FakeCache:
+    def orders_open(self, instrument_id=None):
+        return []
+
+    def instrument(self, instrument_id):
+        return SimpleNamespace(size_precision=3, size_increment=0.001, min_notional=None)
+
+    def positions(self, instrument_id=None):
+        return []
+
+
+class _FakeStrategyBase:
+    """Stands in for nautilus_trader.trading.strategy.Strategy."""
+
+    def __init__(self, config):
+        self.config = config
+        self.portfolio = _FakePortfolio()
+        self.cache = _FakeCache()
+        self.order_factory = SimpleNamespace(
+            market=lambda *a, **kw: SimpleNamespace(args=a, kwargs=kw)
+        )
+
+    def subscribe_instrument(self, instrument_id):
+        pass
+
+    def subscribe_bars(self, bar_type):
+        pass
+
+    def submit_order(self, order):
+        pass
+
+
+class _FakeTrader:
+    def __init__(self):
+        self.strategies: list = []
+
+    def add_strategy(self, strategy):
+        self.strategies.append(strategy)
+
+
+class _FakeLoop:
+    def __init__(self, node):
+        self._node = node
+        self.halted_when_stop_scheduled: bool | None = None
+
+    def call_soon_threadsafe(self, fn):
+        strategies = self._node.trader.strategies
+        self.halted_when_stop_scheduled = bool(strategies and strategies[0].halted)
+        fn()
+
+
+class _FakeTradingNode:
+    instances: list = []
+    bars: list = []  # per-install knobs (a fresh subclass per test)
+    equity_script: list = []
+
+    def __init__(self, config):
+        self.config = config
+        self.trader = _FakeTrader()
+        self.kernel = SimpleNamespace(loop=_FakeLoop(self))
+        self.portfolio = _FakePortfolio()
+        self.cache = _FakeCache()
+        self._stopped = False
+        _FakeTradingNode.instances.append(self)
+
+    def add_data_client_factory(self, venue, factory):
+        pass
+
+    def add_exec_client_factory(self, venue, factory):
+        pass
+
+    def build(self):
+        pass
+
+    def stop(self):
+        self._stopped = True
+
+    def dispose(self):
+        pass
+
+    def run(self, raise_exception=False):
+        strat = self.trader.strategies[0]
+        strat.on_start()
+        for i, bar in enumerate(type(self).bars):
+            if i < len(type(self).equity_script):
+                strat.portfolio.equity = type(self).equity_script[i]
+            try:
+                strat.on_bar(bar)
+            except Exception:
+                if raise_exception:
+                    raise
+        # The real node blocks until stopped; mirror that so the deadline /
+        # halt paths in _run_node are what terminates the session.
+        while not self._stopped:
+            time.sleep(0.005)
+
+
+def _fake_bar(i: int, close: float = 100.5, ts_init=None):
+    return SimpleNamespace(
+        ts_init=1_700_000_000_000_000_000 + i * 3_600_000_000_000 if ts_init is None else ts_init,
+        open=close,
+        high=close,
+        low=close,
+        close=close,
+        volume=1.0,
+    )
+
+
+def _bar_ts(i: int) -> str:
+    return datetime.fromtimestamp(1_700_000_000 + i * 3600, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S+00:00"
+    )
+
+
+class _StubDecisionModel:
+    """Deterministic strategy model: every bar targets +1.0 leverage."""
+
+    def targets(self, df):
+        return pd.Series([1.0] * len(df))
+
+
+def _install_fake_nautilus(monkeypatch, *, bars, equities):
+    """Register fake nautilus_trader modules; return the fake node class."""
+    _FakeTradingNode.instances.clear()
+    node_cls = type(
+        "_FakeTradingNode",
+        (_FakeTradingNode,),
+        {"bars": list(bars), "equity_script": list(equities)},
+    )
+
+    class _Cfg:
+        def __init__(self, **kwargs):
+            vars(self).update(kwargs)
+
+    def _mod(name, **attrs):
+        module = ModuleType(name)
+        vars(module).update(attrs)
+        monkeypatch.setitem(sys.modules, name, module)
+
+    _mod("nautilus_trader")
+    _mod("nautilus_trader.adapters")
+    _mod("nautilus_trader.adapters.binance")
+    _mod("nautilus_trader.adapters.binance.common")
+    _mod(
+        "nautilus_trader.adapters.binance.common.enums",
+        BinanceAccountType=SimpleNamespace(USDT_FUTURES="USDT_FUTURES"),
+        BinanceEnvironment=SimpleNamespace(TESTNET="TESTNET", MAINNET="MAINNET"),
+    )
+    _mod("nautilus_trader.adapters.binance.common.symbol", BinanceSymbol=lambda s: s)
+    _mod(
+        "nautilus_trader.adapters.binance.config",
+        BinanceDataClientConfig=_Cfg,
+        BinanceExecClientConfig=_Cfg,
+        BinanceInstrumentProviderConfig=_Cfg,
+    )
+    _mod(
+        "nautilus_trader.adapters.binance.factories",
+        BinanceLiveDataClientFactory=object,
+        BinanceLiveExecClientFactory=object,
+    )
+    _mod("nautilus_trader.common", Environment=SimpleNamespace(SANDBOX="SANDBOX"))
+    _mod(
+        "nautilus_trader.config",
+        LoggingConfig=_Cfg,
+        StrategyConfig=_Cfg,
+        TradingNodeConfig=_Cfg,
+    )
+    _mod("nautilus_trader.live")
+    _mod("nautilus_trader.live.node", TradingNode=node_cls)
+    _mod("nautilus_trader.model")
+    _mod("nautilus_trader.model.currencies", Currency=SimpleNamespace(from_str=lambda s: s))
+    _mod("nautilus_trader.model.data", BarType=SimpleNamespace(from_str=lambda s: s))
+    _mod(
+        "nautilus_trader.model.enums",
+        OmsType=SimpleNamespace(NETTING="NETTING"),
+        OrderSide=SimpleNamespace(BUY="BUY", SELL="SELL"),
+    )
+    _mod(
+        "nautilus_trader.model.identifiers",
+        InstrumentId=SimpleNamespace(from_str=lambda s: s),
+        Venue=lambda s: s,
+    )
+    _mod("nautilus_trader.model.objects", Quantity=_FakeQuantity)
+    _mod("nautilus_trader.trading")
+    _mod("nautilus_trader.trading.strategy", Strategy=_FakeStrategyBase)
+    monkeypatch.setattr(
+        live_backend, "build_strategy", lambda name, **kw: _StubDecisionModel()
+    )
+    return node_cls
+
+
+def _run_fake_session(monkeypatch, *, bars, equities, max_minutes=0.005):
+    node_cls = _install_fake_nautilus(monkeypatch, bars=bars, equities=equities)
+    warmup = pd.DataFrame(
+        {
+            "ts": ["2026-01-01T00:00:00+00:00"],
+            "open": [100.0],
+            "high": [101.0],
+            "low": [99.0],
+            "close": [100.0],
+            "volume": [1.0],
+        }
+    )
+    cfg = {
+        "mode": "testnet",
+        "interval": "1h",
+        "initial_equity": 10_000.0,
+        "default_leverage": 3.0,
+        "max_leverage": 5.0,
+        "risk": {
+            "kill_switch": False,
+            "enable_testnet": True,
+            "max_daily_loss": 500.0,
+            "daily_loss_hysteresis": 0.0,
+            "max_drawdown_pct": 0.15,
+            "max_order_notional": 5000.0,
+            "max_position_notional": 15_000.0,
+        },
+    }
+    result = live_backend._run_node(
+        warmup=warmup,
+        cfg=cfg,
+        symbol="BTCUSDT",
+        strategy_name="dual_ma",
+        strategy_kwargs={},
+        api_key="k",
+        api_secret="s",
+        max_minutes=max_minutes,
+    )
+    return result, node_cls
+
+
+def test_session_outage_with_prior_good_equity_uses_last_good(monkeypatch):
+    """Mid-session venue-equity outage: the last known-good reading carries
+    the session — an active LOSS_HALTED must NOT clear on the peak."""
+    bars = [_fake_bar(i) for i in range(4)]
+    result, _ = _run_fake_session(
+        monkeypatch,
+        bars=bars,
+        equities=[10_000.0, 9_400.0, None, 9_900.0],  # None = outage bar
+    )
+    # floor = 10_000 - 500 = 9_500: bar1 halts (9_400), the outage bar must
+    # keep the halt (old behavior fed peak 10_000 → spurious clear), and the
+    # halt clears only when the venue genuinely reads 9_900 again.
+    events = result["loss_halt_events"]
+    assert [e["event"] for e in events] == ["halted", "cleared"]
+    assert events[0]["ts"] == _bar_ts(1) and events[0]["equity"] == pytest.approx(9_400.0)
+    assert events[1]["ts"] == _bar_ts(3) and events[1]["equity"] == pytest.approx(9_900.0)
+    # outage bar recorded the last-good equity, never the session peak
+    assert result["account_curve"][2]["equity"] == pytest.approx(9_400.0)
+    assert result["equity_curve"][2]["equity"] == pytest.approx(9_400.0)
+    assert result["risk_decisions"][2]["pre_trade_equity"] == pytest.approx(9_400.0)
+    assert result["peak_equity"] == pytest.approx(10_000.0)
+    # trading continued on the stale snapshot: submit on bar0 and bar3 only
+    assert result["orders_submitted"] == 2
+    assert result["equity_source"] == "venue"
+
+
+def test_session_outage_from_start_fails_closed(monkeypatch):
+    """No good equity snapshot yet: decide nothing, submit nothing, record
+    nothing — and resume once the venue account becomes readable."""
+    bars = [_fake_bar(i) for i in range(3)]
+    result, _ = _run_fake_session(
+        monkeypatch,
+        bars=bars,
+        equities=[None, None, 9_900.0],
+    )
+    assert result["bars"] == 3
+    # no decisions/submissions/curve entries while equity was unreadable
+    assert len(result["risk_decisions"]) == 1  # bar2 only
+    assert result["orders_submitted"] == 1
+    assert result["equity_curve_len"] == 1
+    assert len(result["account_curve"]) == 1
+    assert result["liquidated"] is False
+    assert result["invalidated"] is False
+    assert result["loss_halt_events"] == []
+    # the trace honestly reports the venue was never readable at session init
+    assert result["equity_source"] == "config_fallback"
+    assert result["initial_equity"] == pytest.approx(10_000.0)
+
+
+# the crash test intentionally kills the runner thread (that traceback is the
+# failure signal the production code surfaces as a RuntimeError)
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_runner_thread_crash_marks_session_errored(monkeypatch):
+    """A strategy exception in on_bar kills the runner thread; the session
+    must surface as an error, never as a normal status:ok result."""
+    bars = [_fake_bar(0, ts_init="not-a-number")]
+    node_cls = _install_fake_nautilus(monkeypatch, bars=bars, equities=[10_000.0])
+    warmup = pd.DataFrame(
+        {
+            "ts": ["2026-01-01T00:00:00+00:00"],
+            "open": [100.0],
+            "high": [101.0],
+            "low": [99.0],
+            "close": [100.0],
+            "volume": [1.0],
+        }
+    )
+    cfg = {
+        "mode": "testnet",
+        "risk": {"kill_switch": False, "enable_testnet": True},
+    }
+    with pytest.raises(RuntimeError, match="died mid-session"):
+        live_backend._run_node(
+            warmup=warmup,
+            cfg=cfg,
+            symbol="BTCUSDT",
+            strategy_name="dual_ma",
+            strategy_kwargs={},
+            api_key="k",
+            api_secret="s",
+            max_minutes=1.0,  # deadline far away: the crash is what ends it
+        )
+    node = _FakeTradingNode.instances[-1]
+    assert node.trader.strategies[0].started  # mid-session crash, not startup
+    assert node._stopped  # node still wound down cleanly
+
+
+def test_external_flatten_fires_only_on_second_quiet_bar(monkeypatch):
+    """Stale-flat venue reads one bar past submission no longer trip the
+    liquidation heuristic; two consecutive quiet-bar observations do."""
+    # bar0 submits (expected_qty > 0, venue stays flat — no fill simulation);
+    # bars 1-2 have close 0.0 so the gate rejects (invalid mark) and nothing
+    # resubmits: quiet bars with a stale-flat venue read and expected qty.
+    bars = [_fake_bar(0), _fake_bar(1, close=0.0), _fake_bar(2, close=0.0)]
+    result, _ = _run_fake_session(
+        monkeypatch, bars=bars, equities=[10_000.0] * 3, max_minutes=1.0
+    )
+    assert result["orders_submitted"] == 1
+    # exactly one inference event, on the SECOND quiet bar (bar2, not bar1)
+    assert result["liquidation_events"] == [{"ts": _bar_ts(2), "detector": "external_flatten"}]
+    assert result["liquidated"] is True
+    assert result["decision_phase_final"] == "LIQUIDATED"
+
+
+def test_deadline_path_halts_strategy_before_scheduling_stop(monkeypatch):
+    """Until node.stop actually runs, bars keep arriving on the daemon node;
+    the strategy must be halted before the stop is scheduled."""
+    result, node_cls = _run_fake_session(
+        monkeypatch, bars=[_fake_bar(0)], equities=[10_000.0], max_minutes=0.005
+    )
+    assert result["orders_submitted"] == 1  # clean session sanity check
+    node = _FakeTradingNode.instances[-1]
+    assert node._stopped
+    assert node.kernel.loop.halted_when_stop_scheduled is True
+
+
+# --- run_shadow --json stdout contract ------------------------------------------
+
+
+def test_run_shadow_json_diverts_raw_fd1_writes(monkeypatch, capfd, tmp_path):
+    """run_shadow runs the same live TradingNode whose Rust logger writes fd 1
+    directly; under --json that channel must be diverted so stdout parses as
+    exactly one JSON document (same contract as cli.py)."""
+
+    def fake_build(cfg, bars, inputs, *, force_strategy, force_lookback):
+        # raw fd-1 write = the Rust logger path; print = Python-level logging
+        os.write(1, b"rust-fd1 shadow noise\n")
+        print("python-level session log")
+        return {
+            "schema": "galahad.shadow.v1",
+            "run_id": "20260905T000000Z",
+            "inputs": {},
+            "engines": {},
+            "reconciliation": {},
+            "known_divergences": [],
+        }
+
+    monkeypatch.setattr(run_shadow, "_preflight", lambda cfg: [])
+    monkeypatch.setattr(run_shadow, "build_shadow_report", fake_build)
+    rc = run_shadow.main(["--source", "fixture", "--json", "--output-dir", str(tmp_path)])
+    out, err = capfd.readouterr()
+    assert rc == 0
+    # stdout is exactly one JSON document
+    doc, end = json.JSONDecoder().raw_decode(out)
+    assert out[end:].strip() == ""
+    assert doc["schema"] == "galahad.shadow.v1"
+    # diverted session noise is preserved on stderr, not dropped
+    assert "rust-fd1 shadow noise" not in out
+    assert "rust-fd1 shadow noise" in err
+    assert "python-level session log" in err

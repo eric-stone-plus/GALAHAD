@@ -34,7 +34,8 @@ risk:
   # tiers ascending in drawdown, leverage_multiplier in [0,1]; the deepest
   # breached tier scales all targets; 0.0 forces flat (the ladder's own rung —
   # max_drawdown_pct invalidation still fires at its own threshold above it).
-  # Malformed ladders (non-ascending, out-of-range) are a hard config error.
+  # Malformed ladders (non-ascending drawdowns, out-of-range or increasing
+  # multipliers) are a hard config error.
   # Suggested: [{drawdown: 0.05, leverage_multiplier: 0.5},
   #             {drawdown: 0.075, leverage_multiplier: 0.0}]
   derisk_ladder: []

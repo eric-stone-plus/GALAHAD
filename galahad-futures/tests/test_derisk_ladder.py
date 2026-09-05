@@ -169,9 +169,33 @@ def test_malformed_ladders_raise():
         [{"leverage_multiplier": 0.5}],                     # missing key
         {"drawdown": 0.05, "leverage_multiplier": 0.5},     # not a list
         "abc",                                              # not a list
+        [{"drawdown": 0.05, "leverage_multiplier": 0.5},    # multiplier rises
+         {"drawdown": 0.10, "leverage_multiplier": 0.8}],   # with depth
     ):
         with pytest.raises(ValueError, match="derisk_ladder"):
             _gate(ladder=bad)
+
+
+def test_multiplier_must_be_non_increasing_with_depth():
+    """A deeper rung may never re-leverage; equal multipliers are allowed."""
+    with pytest.raises(ValueError, match="non-increasing"):
+        _gate(
+            ladder=[
+                {"drawdown": 0.05, "leverage_multiplier": 0.2},
+                {"drawdown": 0.10, "leverage_multiplier": 0.6},
+            ]
+        )
+    gate = _gate(
+        ladder=[
+            {"drawdown": 0.05, "leverage_multiplier": 0.5},
+            {"drawdown": 0.10, "leverage_multiplier": 0.5},
+            {"drawdown": 0.15, "leverage_multiplier": 0.0},
+        ]
+    )
+    assert gate.config.derisk_ladder == ((0.05, 0.5), (0.10, 0.5), (0.15, 0.0))
+    # idempotent re-validation of normalized pairs enforces it too
+    with pytest.raises(ValueError, match="non-increasing"):
+        validate_derisk_ladder(((0.05, 0.5), (0.10, 0.7)))
 
 
 def test_validation_via_shared_session_constructor():

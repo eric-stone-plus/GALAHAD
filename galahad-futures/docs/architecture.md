@@ -123,7 +123,8 @@ once the session's peak-to-trough drawdown breaches the rung.
   `SessionRisk.from_config`, so paper, nautilus, and testnet inherit it
   identically — parity holds by construction). Malformed config is a
   hard `ValueError`: non-ascending drawdowns, drawdowns outside
-  `(0, 1]`, multipliers outside `[0, 1]`, missing keys, wrong types.
+  `(0, 1]`, multipliers outside `[0, 1]` or increasing with depth (a
+  deeper rung may never re-leverage), missing keys, wrong types.
 - **Evidence.** Every decision record carries `derisk_multiplier`; the
   summary gains a `derisk` block: `ladder_enabled`, `tiers_triggered`
   (rungs breached at the session max drawdown), `min_multiplier`.
@@ -303,7 +304,12 @@ Status strings follow the paper engine (`ok`, `no-trade …` variants,
 3. Gate closed (`kill_switch` / `!enable_testnet`) → refuse to connect.
 4. `mode: live` anywhere → blocked at the gate, unconditionally.
 5. Venue position unavailable at reconcile → `position_mismatch: true`.
-6. Real testnet runs are additionally env-gated
+6. Venue equity unreadable mid-session → the last known-good venue
+   reading carries the session (never the session peak); unreadable
+   since session start → no decisions, no submissions.
+7. Trading-node thread dying mid-session without a risk halt →
+   `RuntimeError`; no clean session result is reported.
+8. Real testnet runs are additionally env-gated
    (`GALAHAD_TESTNET_IT=1`) in `scripts/run_shadow.py` and the
    integration test skeleton.
 

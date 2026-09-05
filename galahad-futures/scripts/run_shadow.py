@@ -240,9 +240,28 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     bars, inputs = _resolve_bars(args, cfg, root)
-    report = build_shadow_report(
-        cfg, bars, inputs, force_strategy=args.strategy, force_lookback=args.lookback
-    )
+
+    # --json contract: stdout carries only the report JSON. The live
+    # TradingNode logs from Rust directly onto fd 1 (bypassing Python's
+    # sys.stdout), so under --json fd 1 itself is redirected onto fd 2 for
+    # the session's duration — same pattern as galahad_futures.cli.
+    real_stdout = sys.stdout
+    saved_fd1: int | None = None
+    if args.json:
+        sys.stdout.flush()
+        saved_fd1 = os.dup(1)
+        os.dup2(2, 1)
+        sys.stdout = sys.stderr
+    try:
+        report = build_shadow_report(
+            cfg, bars, inputs, force_strategy=args.strategy, force_lookback=args.lookback
+        )
+    finally:
+        if saved_fd1 is not None:
+            sys.stdout.flush()
+            os.dup2(saved_fd1, 1)
+            os.close(saved_fd1)
+        sys.stdout = real_stdout
 
     out_dir = Path(args.output_dir) if args.output_dir else root / str(cfg.get("output_dir", "output"))
     if not out_dir.is_absolute():
